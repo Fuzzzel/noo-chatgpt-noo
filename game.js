@@ -48,9 +48,6 @@ const biomes = [
 
 const biomeDistance = 2000
 let platforms = []
-let coins = []
-let score = 0
-
 let player = {
   x: 100,
   y: groundHeight - 50,
@@ -246,51 +243,18 @@ function drawFadeOverlay() {
   ctx.restore()
 }
 
-// Vylepšené náhodné generování platforem
 function createPlatforms() {
   platforms = []
-  coins = []
-  let lastX = 0
-  let lastY = groundHeight - 30
   for (let i = 0; i < 100; i++) {
-    let biomeIndex = Math.floor((lastX) / biomeDistance) % biomes.length
-    if (biomeIndex < 0) biomeIndex += biomes.length
+    let biomeIndex = Math.floor((i * 200) / biomeDistance) % biomes.length
     let biome = biomes[biomeIndex]
-
-    let width = 120 + Math.random() * 100
-    let gap = 100 + Math.random() * 150
-    let maxHeightChange = 100
-
-    // Náhodně uprav výšku platformy
-    let newY = lastY + (Math.random() * 2 - 1) * maxHeightChange
-    if (newY > groundHeight - 50) newY = groundHeight - 50
-    if (newY < groundHeight - 200) newY = groundHeight - 200
-
-    let newX = lastX + width + gap
-
     platforms.push({
-      x: newX,
-      y: newY,
-      width: width,
+      x: i * 200,
+      y: groundHeight - 20 - Math.sin(i / 3) * 30,
+      width: 150,
       height: 20,
       biome: biome
     })
-
-    // Přidat mince na platformu s 50% pravděpodobností
-    if (Math.random() < 0.5) {
-      const coinCount = 1 + Math.floor(Math.random() * 3)
-      for (let c = 0; c < coinCount; c++) {
-        coins.push({
-          x: newX + 20 + c * 30,
-          y: newY - 25,
-          radius: 10,
-          collected: false
-        })
-      }
-    }
-
-    lastX = newX
-    lastY = newY
   }
 }
 
@@ -305,31 +269,13 @@ function drawPlatforms() {
   ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight)
 }
 
-function drawCoins() {
-  ctx.save()
-  ctx.translate(-cameraX, 0)
-  for (let coin of coins) {
-    if (coin.collected) continue
-    if (coin.x < cameraX - 50 || coin.x > cameraX + canvas.width + 50) continue
-    ctx.fillStyle = 'yellow'
-    ctx.beginPath()
-    ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2)
-    ctx.fill()
-    // jednoduchý efekt třpytu
-    ctx.strokeStyle = 'orange'
-    ctx.lineWidth = 2
-    ctx.stroke()
-  }
-  ctx.restore()
-}
-
 function drawPlayer() {
   ctx.fillStyle = player.color
   ctx.fillRect(player.x - cameraX, player.y, player.width, player.height)
 }
 
 function updatePlayer() {
-  // horizontální pohyb
+  // horizontal movement
   if (keys['ArrowRight'] || keys['KeyD']) {
     player.dx = player.speed
   } else if (keys['ArrowLeft'] || keys['KeyA']) {
@@ -361,66 +307,63 @@ function updatePlayer() {
     player.dy = 0
     player.onGround = true
   }
+  // prevent falling off left side
   if (player.x < 0) player.x = 0
-
-  // sbírání mincí
-  for (let coin of coins) {
-    if (coin.collected) continue
-    let distX = player.x + player.width/2 - coin.x
-    let distY = player.y + player.height/2 - coin.y
-    let dist = Math.sqrt(distX*distX + distY*distY)
-    if (dist < coin.radius + Math.min(player.width, player.height)/2) {
-      coin.collected = true
-      score += 10
-      // tady můžeš přidat zvuk nebo efekt
-    }
-  }
 }
 
 function updateCamera() {
-  cameraX = player.x - 100
+  cameraX = player.x - canvas.width / 4
+  if (cameraX < 0) cameraX = 0
 }
 
-function drawScore() {
-  ctx.fillStyle = 'white'
-  ctx.font = '24px Arial'
-  ctx.fillText(`Skóre: ${score}`, 20, 40)
-}
-
-function gameLoop() {
-  updateFade()
-  updateWeather()
-  updatePlayer()
-  updateCamera()
-
-  // vykreslení pozadí s přechodem biotopů
-  if (fading) {
-    ctx.fillStyle = lerpColor(fadeFromBiome.bg, fadeToBiome.bg, fadeAlpha)
-  } else {
-    ctx.fillStyle = getCurrentBiome().bg
-  }
+function draw() {
+  const biome = getCurrentBiome()
+  ctx.fillStyle = biome.bg
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   drawPlatforms()
-  drawCoins()
   drawPlayer()
-  drawWeather()
-  drawFadeOverlay()
-  drawScore()
-
-  requestAnimationFrame(gameLoop)
 }
 
-window.addEventListener('keydown', e => {
-  keys[e.code] = true
-  if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && player.onGround) {
+function jump() {
+  if (player.onGround) {
     player.dy = jumpPower
+    player.onGround = false
   }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!gameStarted) return
+  keys[e.code] = true
+  if (e.code === 'Space' || e.code === 'ArrowUp') jump()
 })
 
-window.addEventListener('keyup', e => {
+document.addEventListener('keyup', (e) => {
   keys[e.code] = false
 })
 
-createPlatforms()
-gameLoop()
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (!gameStarted) {
+    gameStarted = true
+    document.getElementById('menu').style.display = 'none'
+    player.x = 100
+    player.y = groundHeight - player.height
+    player.dy = 0
+    player.dx = 0
+    createPlatforms()
+    weatherParticles.length = 0
+    requestAnimationFrame(update)
+  }
+})
+
+function update() {
+  if (!gameStarted) return
+  updatePlayer()
+  updateCamera()
+  updateFade()
+  updateWeather()
+  draw()
+  drawWeather()
+  drawFadeOverlay()
+  requestAnimationFrame(update)
+}
