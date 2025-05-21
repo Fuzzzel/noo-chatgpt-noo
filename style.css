@@ -1,23 +1,19 @@
-* {
+html, body {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
-}
-
-html, body {
-  height: 100%;
   overflow: hidden;
-  background-color: #111;
   font-family: Arial, sans-serif;
-  color: white;
+  background: #000;
+  color: #fff;
+  height: 100%;
+  width: 100%;
 }
 
 #gameCanvas {
   display: block;
   position: fixed;
-  top: 0; left: 0;
-  width: 100vw;
-  height: 100vh;
+  top: 0;
+  left: 0;
   background-color: black;
 }
 
@@ -26,39 +22,46 @@ html, body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(20, 20, 20, 0.9);
+  background: rgba(20, 20, 20, 0.95);
   padding: 30px 40px;
   border-radius: 10px;
   text-align: center;
-  z-index: 10;
-  width: 300px;
+  z-index: 1000;
+  width: 320px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.8);
+  font-size: 16px;
 }
 
 .menu h1, .menu h2 {
   margin-bottom: 20px;
+  font-weight: 700;
 }
 
 .menu button, .menu select {
-  margin-top: 10px;
-  padding: 10px 15px;
+  padding: 10px;
   font-size: 16px;
+  margin-top: 15px;
+  width: 100%;
+  cursor: pointer;
   border-radius: 5px;
   border: none;
-  cursor: pointer;
-}
-
-.menu button:hover, .menu select:hover {
-  background-color: #444;
+  background-color: #333;
   color: white;
 }
 
+.menu button:hover, .menu select:hover {
+  background-color: #555;
+}
+
 #leaderboardList {
-  text-align: left;
-  margin-top: 10px;
+  list-style: none;
+  padding-left: 0;
   max-height: 150px;
   overflow-y: auto;
+  text-align: left;
 }
 
 #leaderboardList li {
-  margin-bottom: 5px;
+  padding: 5px 0;
+  border-bottom: 1px solid #444;
 }
