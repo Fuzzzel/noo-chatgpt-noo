@@ -330,6 +330,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
     createPlatforms()
     weatherParticles.length = 0
     requestAnimationFrame(update)
+     document.getElementById('mainMenu').style.display = 'none';
   }
 })
 
