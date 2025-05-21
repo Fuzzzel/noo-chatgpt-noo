@@ -1,80 +1,64 @@
-body {
+* {
   margin: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f0f0f0;
-  overflow: hidden;
-  user-select: none;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-canvas {
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #111;
+  font-family: Arial, sans-serif;
+  color: white;
+}
+
+#gameCanvas {
   display: block;
-  background-color: #87ceeb;
-  border: none;
+  position: fixed;
+  top: 0; left: 0;
   width: 100vw;
   height: 100vh;
+  background-color: black;
 }
-
 
 .menu {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: #222;
-  color: white;
-  padding: 20px 40px;
-  border-radius: 12px;
-  box-shadow: 0 0 25px rgba(0,0,0,0.7);
+  background: rgba(20, 20, 20, 0.9);
+  padding: 30px 40px;
+  border-radius: 10px;
   text-align: center;
   z-index: 10;
-  min-width: 280px;
+  width: 300px;
 }
 
 .menu h1, .menu h2 {
-  margin: 0 0 20px 0;
+  margin-bottom: 20px;
 }
 
-.menu button {
-  background-color: #0a74da;
-  border: none;
-  color: white;
-  padding: 12px 25px;
-  font-size: 16px;
-  border-radius: 8px;
-  cursor: pointer;
+.menu button, .menu select {
   margin-top: 10px;
-  transition: background-color 0.3s ease;
-}
-
-.menu button:hover {
-  background-color: #084a8e;
-}
-
-select {
+  padding: 10px 15px;
   font-size: 16px;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  margin-bottom: 15px;
-  width: 100%;
-  box-sizing: border-box;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+
+.menu button:hover, .menu select:hover {
+  background-color: #444;
+  color: white;
 }
 
 #leaderboardList {
   text-align: left;
-  padding-left: 15px;
+  margin-top: 10px;
   max-height: 150px;
   overflow-y: auto;
 }
 
-#stats {
-  white-space: pre-wrap;
-  text-align: left;
-  margin-top: 15px;
-  background: #333;
-  padding: 15px;
-  border-radius: 8px;
-  font-size: 14px;
-  max-height: 180px;
-  overflow-y: auto;
+#leaderboardList li {
+  margin-bottom: 5px;
 }
