@@ -5,12 +5,8 @@ function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
-
 resizeCanvas();
-window.addEventListener('resize', () => {
-  resizeCanvas();
-});
-
+window.addEventListener('resize', resizeCanvas);
 
 const keys = {
   ArrowLeft: false,
@@ -25,18 +21,17 @@ document.addEventListener('keyup', e => {
   if (e.code in keys) keys[e.code] = false;
 });
 
-let gameRunning = false;
+let gameStarted = false;
 
 const player = {
   x: 50,
-  y: 400,
+  y: 0,
   width: 30,
   height: 30,
   dx: 0,
   dy: 0,
   color: 'red',
   onGround: false,
-  skin: 'red',
 };
 
 const gravity = 0.8;
@@ -47,50 +42,25 @@ let cameraX = 0;
 let platforms = [];
 let coins = [];
 let lavaDrops = [];
-let enemies = [];
-let destructibleBlocks = [];
-let powerUps = [];
 
 let score = 0;
 let highScore = Number(localStorage.getItem('highScore')) || 0;
 let lastPlatformX = 0;
 let biomeIndex = 0;
 const biomeDistance = 1000;
-const groundHeight = 470;
+
+function getGroundHeight() {
+  return canvas.height - 30;
+}
+let groundHeight = getGroundHeight();
 
 const biomes = [
-  { name: "Les", bg: '#87CEEB', platformColor: 'green', groundColor: '#228B22', groundType: 'safe', floorType: 'grass' },
-  { name: "Poušť", bg: '#ffe4b5', platformColor: '#c2b280', groundColor: '#edc9af', groundType: 'safe', floorType: 'sand' },
-  { name: "Láva", bg: '#330000', platformColor: '#ff4500', groundColor: 'darkred', groundType: 'lava', floorType: 'lava' },
-  { name: "Led", bg: '#d0f0ff', platformColor: '#a0e9f0', groundColor: '#b0e0e6', groundType: 'ice', floorType: 'ice' },
-  { name: "Toxický", bg: '#2f4f4f', platformColor: '#39ff14', groundColor: '#006400', groundType: 'toxic', floorType: 'toxic' },
+  { name: "Les", bg: '#87CEEB', platformColor: 'green', groundColor: '#228B22', groundType: 'safe' },
+  { name: "Poušť", bg: '#ffe4b5', platformColor: '#c2b280', groundColor: '#edc9af', groundType: 'safe' },
+  { name: "Láva", bg: '#330000', platformColor: '#ff4500', groundColor: 'darkred', groundType: 'lava' },
+  { name: "Led", bg: '#d0f0ff', platformColor: '#a0e9f0', groundColor: '#b0e0e6', groundType: 'ice' },
+  { name: "Toxický", bg: '#2f4f4f', platformColor: '#39ff14', groundColor: '#006400', groundType: 'toxic' },
 ];
-
-const floorColors = {
-  grass: '#228B22',
-  sand: '#edc9af',
-  lava: '#ff3300',
-  ice: '#b0e0e6',
-  toxic: '#006400',
-};
-
-const skins = {
-  red: 'red',
-  gold: 'gold',
-  blue: 'blue',
-  green: 'green',
-};
-
-let leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
-
-function generateRandomName() {
-  const adjectives = ['Rychlý', 'Silný', 'Chytrý', 'Divoký', 'Statečný'];
-  const animals = ['Lev', 'Vlk', 'Orel', 'Tygr', 'Medvěd'];
-  return adjectives[Math.floor(Math.random() * adjectives.length)] + ' ' + animals[Math.floor(Math.random() * animals.length)];
-}
-
-let playerName = localStorage.getItem('playerName') || generateRandomName();
-localStorage.setItem('playerName', playerName);
 
 function getCurrentBiome() {
   biomeIndex = Math.floor(player.x / biomeDistance) % biomes.length;
@@ -98,8 +68,8 @@ function getCurrentBiome() {
 }
 
 function spawnLava() {
-  const speedX = (Math.random() - 0.5) * 2;
-  const speedY = 2 + Math.random() * 3;
+  const speedX = (Math.random() - 0.5) * 2; 
+  const speedY = 2 + Math.random() * 3;      
   lavaDrops.push({
     x: cameraX + Math.random() * canvas.width,
     y: 0,
@@ -109,46 +79,23 @@ function spawnLava() {
   });
 }
 
-setInterval(() => {
-  if (getCurrentBiome().name === "Láva") spawnLava();
-}, 1500);
+let lavaInterval;
 
-function spawnEnemy() {
-  if (Math.random() < 0.01) {
-    enemies.push({
-      x: cameraX + canvas.width + 50,
-      y: groundHeight - 30,
-      width: 30,
-      height: 30,
-      dx: -2 - Math.random() * 2,
-      dy: 0,
-      color: 'purple',
-      onGround: true,
-    });
-  }
+function startLavaSpawn() {
+  lavaInterval = setInterval(spawnLava, 1500);
 }
 
-function spawnPowerUp() {
-  if (Math.random() < 0.005) {
-    powerUps.push({
-      x: cameraX + canvas.width + 50,
-      y: groundHeight - 50,
-      width: 20,
-      height: 20,
-      type: 'jumpBoost',
-      collected: false,
-      color: 'cyan',
-    });
-  }
+function stopLavaSpawn() {
+  clearInterval(lavaInterval);
 }
 
 function generatePlatforms() {
   const maxVerticalGap = 100;
   const maxHorizontalGap = 200;
 
-  let lastY = platforms.length ? platforms[platforms.length - 1].y : 350;
+  let lastY = platforms.length ? platforms[platforms.length - 1].y : groundHeight - 120;
 
-  while (lastPlatformX < player.x + 800) {
+  while (lastPlatformX < player.x + canvas.width + 200) {
     const height = 10;
     const width = 100;
 
@@ -158,11 +105,7 @@ function generatePlatforms() {
 
     y = Math.max(150, Math.min(y, groundHeight - 50));
 
-    platforms.push({ x, y, width, height, destructible: false, hitsLeft: 0 });
-
-    if (Math.random() < 0.3 && getCurrentBiome().name === "Láva") {
-      destructibleBlocks.push({ x, y: y - 20, width: 50, height: 20, hitsLeft: 3 });
-    }
+    platforms.push({ x, y, width, height });
 
     if (Math.random() < 0.5) {
       coins.push({ x: x + 20 + Math.random() * 60, y: y - 30, collected: false });
@@ -172,12 +115,9 @@ function generatePlatforms() {
     lastY = y;
   }
 
-  platforms = platforms.filter(p => p.x > player.x - 800);
-  coins = coins.filter(c => c.x > player.x - 800);
+  platforms = platforms.filter(p => p.x > player.x - canvas.width - 200);
+  coins = coins.filter(c => c.x > player.x - canvas.width - 200);
   lavaDrops = lavaDrops.filter(l => l.y < canvas.height + 50 && l.x > cameraX - 50 && l.x < cameraX + canvas.width + 50);
-  destructibleBlocks = destructibleBlocks.filter(b => b.x > player.x - 800);
-  enemies = enemies.filter(e => e.x > player.x - 800);
-  powerUps = powerUps.filter(p => p.x > player.x - 800);
 }
 
 function showDeathScreen() {
@@ -185,8 +125,8 @@ function showDeathScreen() {
     highScore = score;
     localStorage.setItem('highScore', highScore);
   }
-  updateLeaderboard(playerName, score);
   document.getElementById('deathScreen').style.display = 'flex';
+  stopLavaSpawn();
 }
 
 function hideDeathScreen() {
@@ -195,7 +135,7 @@ function hideDeathScreen() {
 
 function resetGame() {
   player.x = 50;
-  player.y = 400;
+  player.y = groundHeight - player.height;
   player.dx = 0;
   player.dy = 0;
   score = 0;
@@ -204,79 +144,32 @@ function resetGame() {
   platforms = [];
   coins = [];
   lavaDrops = [];
-  enemies = [];
-  destructibleBlocks = [];
-  powerUps = [];
   generatePlatforms();
   hideDeathScreen();
-}
-
-document.getElementById('restartBtn').addEventListener('click', () => {
-  resetGame();
-  gameRunning = true;
-  hideDeathScreen();
-  update();
-});
-
-function updateLeaderboard(name, score) {
-  leaderboard.push({ name, score });
-  leaderboard.sort((a, b) => b.score - a.score);
-  leaderboard = leaderboard.slice(0, 10);
-  localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
-  updateLeaderboardUI();
-}
-
-function updateLeaderboardUI() {
-  const list = document.getElementById('leaderboardList');
-  if (!list) return;
-  list.innerHTML = '';
-  leaderboard.forEach(entry => {
-    const li = document.createElement('li');
-    li.textContent = `${entry.name}: ${entry.score}`;
-    list.appendChild(li);
-  });
-}
-
-function startGame() {
-  resetGame();
-  hideMainMenu();
-  gameRunning = true;
-  updateLeaderboardUI();
-  update();
-}
-
-function showMainMenu() {
-  const menu = document.getElementById('mainMenu');
-  menu.style.display = 'flex';
-}
-
-function hideMainMenu() {
-  const menu = document.getElementById('mainMenu');
-  menu.style.display = 'none';
+  startLavaSpawn();
+  gameStarted = true;
 }
 
 document.getElementById('startBtn').addEventListener('click', () => {
-  if (!gameRunning) {
-    startGame();
-  }
-});
-
-document.getElementById('colorSelect').addEventListener('change', (e) => {
-  if (e.target.value === 'gold' && score < 100) {
-    alert('Zlatý skin se odemkne po dosažení skóre 100!');
-    e.target.value = player.skin;
+  const colorSelect = document.getElementById('colorSelect');
+  player.color = colorSelect.value === 'gold' && score < 100 ? 'red' : colorSelect.value;
+  if (colorSelect.value === 'gold' && score < 100) {
+    alert("Zlatá barva se odemkne po dosažení skóre 100!");
     return;
   }
-  player.skin = e.target.value;
-  player.color = skins[player.skin];
-  localStorage.setItem('playerSkin', player.skin);
+  document.getElementById('mainMenu').style.display = 'none';
+  resetGame();
+  updateLeaderboardUI();
+  update();
 });
 
-player.skin = localStorage.getItem('playerSkin') || 'red';
-player.color = skins[player.skin];
+document.getElementById('restartBtn').addEventListener('click', () => {
+  document.getElementById('deathScreen').style.display = 'none';
+  resetGame();
+});
 
 function update() {
-  if (!gameRunning) return;
+  if (!gameStarted) return;
 
   if (keys.ArrowLeft) player.dx = -5;
   else if (keys.ArrowRight) player.dx = 5;
@@ -307,25 +200,11 @@ function update() {
     }
   }
 
-  for (let block of destructibleBlocks) {
-    if (
-      player.x < block.x + block.width &&
-      player.x + player.width > block.x &&
-      player.y + player.height < block.y + block.height &&
-      player.y + player.height + player.dy >= block.y
-    ) {
-      player.dy = 0;
-      player.y = block.y - player.height;
-      player.onGround = true;
-    }
-  }
-
   const biome = getCurrentBiome();
 
   if (player.y + player.height >= groundHeight) {
     if (biome.groundType !== 'safe') {
       showDeathScreen();
-      gameRunning = false;
       return;
     } else {
       player.y = groundHeight - player.height;
@@ -355,45 +234,12 @@ function update() {
       player.y + player.height > lava.y - lava.radius
     ) {
       showDeathScreen();
-      gameRunning = false;
       return;
     }
   }
-
-  for (let enemy of enemies) {
-    enemy.x += enemy.dx;
-    if (
-      player.x < enemy.x + enemy.width &&
-      player.x + player.width > enemy.x &&
-      player.y < enemy.y + enemy.height &&
-      player.y + player.height > enemy.y
-    ) {
-      showDeathScreen();
-      gameRunning = false;
-      return;
-    }
-  }
-
-  for (let powerUp of powerUps) {
-    if (!powerUp.collected &&
-      player.x < powerUp.x + powerUp.width &&
-      player.x + player.width > powerUp.x &&
-      player.y < powerUp.y + powerUp.height &&
-      player.y + player.height > powerUp.y) {
-      powerUp.collected = true;
-      if (powerUp.type === 'jumpBoost') {
-        player.dy = jumpStrength * 1.5;
-      }
-    }
-  }
-
-  spawnEnemy();
-  spawnPowerUp();
 
   cameraX = player.x - canvas.width / 2;
-
   draw();
-
   requestAnimationFrame(update);
 }
 
@@ -401,12 +247,10 @@ function draw() {
   const biome = getCurrentBiome();
   const offsetX = -cameraX;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   ctx.fillStyle = biome.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = floorColors[biome.floorType] || biome.groundColor;
+  ctx.fillStyle = biome.groundColor;
   ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight);
 
   ctx.fillStyle = biome.platformColor;
@@ -430,23 +274,6 @@ function draw() {
     ctx.fill();
   }
 
-  ctx.fillStyle = 'purple';
-  for (let enemy of enemies) {
-    ctx.fillRect(enemy.x + offsetX, enemy.y, enemy.width, enemy.height);
-  }
-
-  ctx.fillStyle = 'brown';
-  for (let block of destructibleBlocks) {
-    ctx.fillRect(block.x + offsetX, block.y, block.width, block.height);
-  }
-
-  ctx.fillStyle = 'cyan';
-  for (let powerUp of powerUps) {
-    if (!powerUp.collected) {
-      ctx.fillRect(powerUp.x + offsetX, powerUp.y, powerUp.width, powerUp.height);
-    }
-  }
-
   ctx.fillStyle = player.color;
   ctx.fillRect(player.x + offsetX, player.y, player.width, player.height);
 
@@ -457,5 +284,45 @@ function draw() {
   ctx.fillText(`Biom: ${biome.name}`, 10, 90);
 }
 
+function updateLeaderboardUI() {
+  const leaderboardList = document.getElementById('leaderboardList');
+  leaderboardList.innerHTML = '';
+  const leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+  leaderboard.sort((a,b) => b.score - a.score);
+  leaderboard.slice(0, 10).forEach(entry => {
+    const li = document.createElement('li');
+    li.textContent = `${entry.name}: ${entry.score}`;
+    leaderboardList.appendChild(li);
+  });
+}
+
+function generateRandomName() {
+  const adjectives = ['Rychlý', 'Silný', 'Šťastný', 'Divoký', 'Mocný', 'Zářivý'];
+  const nouns = ['Lev', 'Tygr', 'Orlice', 'Vlčák', 'Jaguár', 'Havran'];
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  return `${adj} ${noun}`;
+}
+
+function saveScoreToLeaderboard(score) {
+  let leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+  if (!leaderboard.find(e => e.name === playerName)) {
+    leaderboard.push({ name: playerName, score });
+  } else {
+    leaderboard = leaderboard.map(e => {
+      if (e.name === playerName && score > e.score) return { name: playerName, score };
+      return e;
+    });
+  }
+  localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
+}
+
+const playerName = generateRandomName();
+
 showMainMenu();
-updateLeaderboardUI();
+
+function showMainMenu() {
+  document.getElementById('mainMenu').style.display = 'flex';
+  document.getElementById('deathScreen').style.display = 'none';
+  updateLeaderboardUI();
+}
