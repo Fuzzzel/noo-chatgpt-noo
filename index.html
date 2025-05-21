@@ -6,8 +6,32 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <!-- HLAVNÍ MENU -->
+  <div id="mainMenu">
+    <h1>2D Mario Hra</h1>
+    <button id="startBtn">Start</button>
+
+    <div class="section">
+      <h2>Výběr barvy</h2>
+      <div id="colorSelector">
+        <button class="color-btn" data-color="red" style="background: red;"></button>
+        <button class="color-btn" data-color="blue" style="background: blue;"></button>
+        <button class="color-btn" data-color="green" style="background: green;"></button>
+        <button class="color-btn" data-color="gold" style="background: gold;" disabled title="Odemkne se při 100 skóre">🔒</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Leaderboard</h2>
+      <ul id="leaderboardList"></ul>
+    </div>
+  </div>
+
+  <!-- HERNÍ PLOCHA -->
   <canvas id="gameCanvas" width="800" height="500"></canvas>
 
+  <!-- GAME OVER -->
   <div id="deathScreen">
     <h1>Game Over</h1>
     <button id="restartBtn">Hrát znovu</button>
