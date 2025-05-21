@@ -1,52 +1,109 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
-document.addEventListener('keydown', e => { if (e.code in keys) keys[e.code] = true; });
-document.addEventListener('keyup', e => { if (e.code in keys) keys[e.code] = false; });
+const keys = {
+  ArrowLeft: false,
+  ArrowRight: false,
+  Space: false,
+};
 
-const skins = [
-  { name: "Červená", color: 'red', unlockScore: 0 },
-  { name: "Zlatá", color: 'gold', unlockScore: 100 },
-  { name: "Modrá", color: 'deepskyblue', unlockScore: 300 },
-];
+document.addEventListener('keydown', e => {
+  if (e.code in keys) keys[e.code] = true;
+});
+document.addEventListener('keyup', e => {
+  if (e.code in keys) keys[e.code] = false;
+});
 
-let selectedSkinIndex = 0;
+// Generate random user name for leaderboard
+function generateRandomName() {
+  const adjectives = ['Rychlý', 'Tichý', 'Divoký', 'Šťastný', 'Hbitý', 'Moudrý'];
+  const animals = ['Králík', 'Lev', 'Ježek', 'Sova', 'Rys', 'Orel'];
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const animal = animals[Math.floor(Math.random() * animals.length)];
+  return adj + ' ' + animal + Math.floor(Math.random() * 100);
+}
+
+const leaderboardKey = 'mario_leaderboard';
+let leaderboard = JSON.parse(localStorage.getItem(leaderboardKey)) || [];
+
+// Add or update leaderboard entry
+function updateLeaderboard(name, score) {
+  const entry = leaderboard.find(e => e.name === name);
+  if (!entry) {
+    leaderboard.push({ name, score });
+  } else if (score > entry.score) {
+    entry.score = score;
+  }
+  leaderboard.sort((a, b) => b.score - a.score);
+  if (leaderboard.length > 10) leaderboard.length = 10;
+  localStorage.setItem(leaderboardKey, JSON.stringify(leaderboard));
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  const ul = document.getElementById('leaderboardList');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (const entry of leaderboard) {
+    const li = document.createElement('li');
+    li.textContent = `${entry.name}: ${entry.score}`;
+    ul.appendChild(li);
+  }
+}
+
+renderLeaderboard();
 
 const player = {
-  x: 50, y: 400, width: 30, height: 30,
-  dx: 0, dy: 0, onGround: false,
-  speed: 5, jumpStrength: -15,
-  color: skins[selectedSkinIndex].color,
-  shield: false,
-  doubleJumpAvailable: true,
+  x: 50,
+  y: 400,
+  width: 30,
+  height: 30,
+  dx: 0,
+  dy: 0,
+  color: 'red',
+  onGround: false,
+  invincible: false,
+  powerUpTime: 0,
+  highJump: false,
 };
 
 const gravity = 0.8;
-const friction = 0.85;
-const groundHeight = 470;
+const friction = 0.8;
+const iceFriction = 0.95;
+const jumpStrength = -15;
+const highJumpStrength = -25;
 
 let cameraX = 0;
-let score = 0;
-let highScore = Number(localStorage.getItem('highScore')) || 0;
-let lastPlatformX = 0;
 let platforms = [];
 let coins = [];
 let lavaDrops = [];
 let enemies = [];
 let powerUps = [];
-let achievements = new Set();
+
+let score = 0;
+let highScore = Number(localStorage.getItem('highScore')) || 0;
+let lastPlatformX = 0;
 let biomeIndex = 0;
 const biomeDistance = 1000;
-let weather = 'clear';
+const groundHeight = 470;
+
+const weatherStates = ['clear', 'rain', 'storm'];
+let currentWeather = 'clear';
 let weatherTimer = 0;
 
+const achievements = {
+  firstCoin: false,
+  score50: false,
+  score100: false,
+  invincibleUsed: false,
+};
+
 const biomes = [
-  { name: "Les", bg: '#87CEEB', platformColor: 'green', groundColor: '#228B22', groundType: 'safe', weatherTypes: ['clear', 'rain'] },
-  { name: "Poušť", bg: '#ffe4b5', platformColor: '#c2b280', groundColor: '#edc9af', groundType: 'safe', weatherTypes: ['clear', 'sandstorm'] },
-  { name: "Láva", bg: '#330000', platformColor: '#ff4500', groundColor: 'darkred', groundType: 'lava', weatherTypes: ['clear', 'ash'] },
-  { name: "Led", bg: '#d0f0ff', platformColor: '#a0e9f0', groundColor: '#b0e0e6', groundType: 'ice', weatherTypes: ['clear', 'snow'] },
-  { name: "Toxický", bg: '#2f4f4f', platformColor: '#39ff14', groundColor: '#006400', groundType: 'toxic', weatherTypes: ['clear', 'fog'] },
+  { name: "Les", bg: '#87CEEB', platformColor: 'green', groundColor: '#228B22', groundType: 'safe' },
+  { name: "Poušť", bg: '#ffe4b5', platformColor: '#c2b280', groundColor: '#edc9af', groundType: 'safe' },
+  { name: "Láva", bg: '#330000', platformColor: '#ff4500', groundColor: 'darkred', groundType: 'lava' },
+  { name: "Led", bg: '#d0f0ff', platformColor: '#a0e9f0', groundColor: '#b0e0e6', groundType: 'ice' },
+  { name: "Toxický", bg: '#2f4f4f', platformColor: '#39ff14', groundColor: '#006400', groundType: 'toxic' },
 ];
 
 function getCurrentBiome() {
@@ -55,36 +112,35 @@ function getCurrentBiome() {
 }
 
 function spawnLava() {
-  if (getCurrentBiome().groundType === 'lava') {
-    const speedX = (Math.random() - 0.5) * 2;
-    const speedY = 2 + Math.random() * 3;
-    lavaDrops.push({
-      x: cameraX + Math.random() * canvas.width,
-      y: 0,
-      radius: 10,
-      dx: speedX,
-      dy: speedY,
-    });
-  }
+  const speedX = (Math.random() - 0.5) * 2;
+  const speedY = 2 + Math.random() * 3;
+  lavaDrops.push({
+    x: cameraX + Math.random() * canvas.width,
+    y: 0,
+    radius: 10,
+    dx: speedX,
+    dy: speedY,
+  });
 }
 
-setInterval(spawnLava, 1500);
-
-function spawnEnemy() {
-  if (Math.random() < 0.02) {
-    const x = player.x + canvas.width + Math.random() * 500;
-    const y = groundHeight - 30;
-    enemies.push({ x, y, width: 30, height: 30, dx: -2 - Math.random() * 2 });
-  }
-}
-
-function spawnPowerUp() {
-  if (Math.random() < 0.01) {
-    const x = player.x + canvas.width + Math.random() * 800;
-    const y = groundHeight - 50 - Math.random() * 100;
-    const types = ['shield', 'doubleJump', 'speed'];
-    const type = types[Math.floor(Math.random() * types.length)];
-    powerUps.push({ x, y, radius: 10, type, collected: false });
+function spawnWeatherEffects() {
+  if (currentWeather === 'rain') {
+    for (let i = 0; i < 5; i++) {
+      const rainX = Math.random() * canvas.width;
+      const rainY = Math.random() * canvas.height;
+      ctx.strokeStyle = 'rgba(174,194,224,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(rainX, rainY);
+      ctx.lineTo(rainX, rainY + 10);
+      ctx.stroke();
+    }
+  } else if (currentWeather === 'storm') {
+    if (Math.random() < 0.02) {
+      ctx.fillStyle = 'white';
+      const flashX = Math.random() * canvas.width;
+      ctx.fillRect(flashX, 0, 5, canvas.height);
+    }
   }
 }
 
@@ -92,34 +148,44 @@ function generatePlatforms() {
   const maxVerticalGap = 100;
   const maxHorizontalGap = 200;
   let lastY = platforms.length ? platforms[platforms.length - 1].y : 350;
-  while (lastPlatformX < player.x + 1000) {
+
+  while (lastPlatformX < player.x + 800) {
     const height = 10;
     const width = 100;
     const x = lastPlatformX + 100 + Math.random() * (maxHorizontalGap - 100);
     let yOffset = (Math.random() - 0.5) * maxVerticalGap * 2;
     let y = lastY + yOffset;
     y = Math.max(150, Math.min(y, groundHeight - 50));
-    platforms.push({ x, y, width, height, destructible: getCurrentBiome().groundType === 'lava' && Math.random() < 0.3, destroyed: false });
+
+    // Destructible blocks only in lava biome
+    const biome = getCurrentBiome();
+    const destructible = biome.groundType === 'lava' && Math.random() < 0.3;
+
+    platforms.push({ x, y, width, height, destructible, destructionTimer: 0 });
+
     if (Math.random() < 0.5) {
       coins.push({ x: x + 20 + Math.random() * 60, y: y - 30, collected: false });
     }
+
+    // Spawn enemies on platforms randomly
+    if (Math.random() < 0.1) {
+      enemies.push({ x: x + 10, y: y - 30, width: 30, height: 30, dx: 1, alive: true, platformX: x, platformWidth: width });
+    }
+
+    // Spawn power-ups randomly
+    if (Math.random() < 0.05) {
+      powerUps.push({ x: x + 50, y: y - 40, width: 20, height: 20, type: Math.random() < 0.5 ? 'invincible' : 'highjump', active: true });
+    }
+
     lastPlatformX = x;
     lastY = y;
   }
-  platforms = platforms.filter(p => p.x > player.x - 800 && !p.destroyed);
-  coins = coins.filter(c => c.x > player.x - 800 && !c.collected);
-  lavaDrops = lavaDrops.filter(l => l.y < canvas.height + 50 && l.x > cameraX - 50 && l.x < cameraX + canvas.width + 50);
-  enemies = enemies.filter(e => e.x + e.width > cameraX - 100);
-  powerUps = powerUps.filter(p => p.x > cameraX - 100 && !p.collected);
-}
 
-function updateWeather() {
-  weatherTimer--;
-  if (weatherTimer <= 0) {
-    const biome = getCurrentBiome();
-    weather = biome.weatherTypes[Math.floor(Math.random() * biome.weatherTypes.length)];
-    weatherTimer = 60 * 30;
-  }
+  platforms = platforms.filter(p => p.x > player.x - 800);
+  coins = coins.filter(c => c.x > player.x - 800);
+  lavaDrops = lavaDrops.filter(l => l.y < canvas.height + 50 && l.x > cameraX - 50 && l.x < cameraX + canvas.width + 50);
+  enemies = enemies.filter(e => e.x > player.x - 800);
+  powerUps = powerUps.filter(pu => pu.x > player.x - 800 && pu.active);
 }
 
 function showDeathScreen() {
@@ -127,7 +193,17 @@ function showDeathScreen() {
     highScore = score;
     localStorage.setItem('highScore', highScore);
   }
-  document.getElementById('deathScreen').style.display = 'flex';
+  updateLeaderboard(playerName, score);
+
+  const deathScreen = document.getElementById('deathScreen');
+  const statsText = `
+    Skóre: ${score}
+    Nejlepší skóre: ${highScore}
+    Biom: ${getCurrentBiome().name}
+    Achievements: ${Object.keys(achievements).filter(k => achievements[k]).join(', ') || 'Žádné'}
+  `;
+  document.getElementById('stats').textContent = statsText;
+  deathScreen.style.display = 'flex';
 }
 
 function hideDeathScreen() {
@@ -139,8 +215,9 @@ function resetGame() {
   player.y = 400;
   player.dx = 0;
   player.dy = 0;
-  player.shield = false;
-  player.doubleJumpAvailable = true;
+  player.invincible = false;
+  player.powerUpTime = 0;
+  player.highJump = false;
   score = 0;
   cameraX = 0;
   lastPlatformX = 0;
@@ -153,255 +230,248 @@ function resetGame() {
   hideDeathScreen();
 }
 
-document.getElementById('restartBtn').addEventListener('click', resetGame);
+document.getElementById('restartBtn').addEventListener('click', () => {
+  resetGame();
+  update();
+});
 
-function applyFriction() {
-  if (getCurrentBiome().groundType === 'ice') {
-    player.dx *= 0.98;
-  } else {
-    player.dx *= friction;
+let playerName = generateRandomName();
+updateLeaderboard(playerName, 0);
+
+document.getElementById('startGameBtn').addEventListener('click', () => {
+  const colorSelect = document.getElementById('colorSelect');
+  let chosenColor = colorSelect.value;
+  if (chosenColor === 'gold' && score < 100) {
+    alert('Zlatá barva se odemkne po dosažení skóre 100!');
+    return;
+  }
+  player.color = chosenColor;
+  document.getElementById('mainMenu').style.display = 'none';
+  resetGame();
+  update();
+});
+
+// Unlock gold color if score >= 100
+function updateColorOptions() {
+  const colorSelect = document.getElementById('colorSelect');
+  if (score >= 100) {
+    const goldOption = [...colorSelect.options].find(o => o.value === 'gold');
+    if (goldOption) goldOption.disabled = false;
   }
 }
 
 function update() {
-  updateWeather();
-  if (keys.ArrowLeft) player.dx = -player.speed;
-  else if (keys.ArrowRight) player.dx = player.speed;
-  else applyFriction();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (keys.Space) {
-    if (player.onGround) {
-      player.dy = player.jumpStrength;
-      player.onGround = false;
-      player.doubleJumpAvailable = true;
-    } else if (player.doubleJumpAvailable) {
-      player.dy = player.jumpStrength;
-      player.doubleJumpAvailable = false;
+  // Update biome and background
+  const biome = getCurrentBiome();
+  ctx.fillStyle = biome.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Weather timer & switch
+  weatherTimer--;
+  if (weatherTimer <= 0) {
+    currentWeather = weatherStates[Math.floor(Math.random() * weatherStates.length)];
+    weatherTimer = 600 + Math.floor(Math.random() * 600);
+  }
+
+  // Spawn lava drops in lava biome during storm or rain
+  if (biome.groundType === 'lava' && (currentWeather === 'rain' || currentWeather === 'storm') && Math.random() < 0.1) {
+    spawnLava();
+  }
+
+  spawnWeatherEffects();
+
+  generatePlatforms();
+
+  // Update lava drops
+  for (let i = lavaDrops.length - 1; i >= 0; i--) {
+    let l = lavaDrops[i];
+    l.x += l.dx;
+    l.y += l.dy;
+
+    ctx.fillStyle = 'orange';
+    ctx.beginPath();
+    ctx.arc(l.x - cameraX, l.y, l.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Check collision with player
+    if (
+      l.x > player.x && l.x < player.x + player.width &&
+      l.y > player.y && l.y < player.y + player.height
+    ) {
+      if (!player.invincible) showDeathScreen();
+    }
+
+    if (l.y > canvas.height) {
+      lavaDrops.splice(i, 1);
     }
   }
 
+  // Update enemies
+  enemies.forEach(e => {
+    if (!e.alive) return;
+    e.x += e.dx;
+    if (e.x < e.platformX) e.dx = 1;
+    if (e.x + e.width > e.platformX + e.platformWidth) e.dx = -1;
+
+    ctx.fillStyle = 'purple';
+    ctx.fillRect(e.x - cameraX, e.y, e.width, e.height);
+
+    // Player collision with enemy
+    if (
+      player.x < e.x + e.width && player.x + player.width > e.x &&
+      player.y < e.y + e.height && player.y + player.height > e.y
+    ) {
+      if (!player.invincible) showDeathScreen();
+      else e.alive = false;
+    }
+  });
+
+  // Update power-ups
+  powerUps.forEach(pu => {
+    ctx.fillStyle = pu.type === 'invincible' ? 'yellow' : 'blue';
+    ctx.fillRect(pu.x - cameraX, pu.y, pu.width, pu.height);
+
+    // Player collects power-up
+    if (
+      player.x < pu.x + pu.width && player.x + player.width > pu.x &&
+      player.y < pu.y + pu.height && player.y + player.height > pu.y
+    ) {
+      pu.active = false;
+      if (pu.type === 'invincible') {
+        player.invincible = true;
+        player.powerUpTime = 600; // 10 seconds at 60fps
+        achievements.invincibleUsed = true;
+      } else if (pu.type === 'highjump') {
+        player.highJump = true;
+        player.powerUpTime = 600;
+      }
+    }
+  });
+
+  // Player physics
+  if (keys.ArrowLeft) {
+    player.dx -= 0.7;
+  }
+  if (keys.ArrowRight) {
+    player.dx += 0.7;
+  }
+
+  // Jump
+  if (keys.Space && player.onGround) {
+    player.dy = player.highJump ? highJumpStrength : jumpStrength;
+    player.onGround = false;
+  }
+
+  // Apply gravity
   player.dy += gravity;
+
+  // Apply friction / ice friction
+  const biomeType = biome.groundType;
+  if (player.onGround) {
+    player.dx *= (biomeType === 'ice') ? iceFriction : friction;
+  } else {
+    player.dx *= 0.95;
+  }
+
+  // Move player
   player.x += player.dx;
   player.y += player.dy;
 
-  generatePlatforms();
-  spawnEnemy();
-  spawnPowerUp();
-
+  // Collision detection with platforms
   player.onGround = false;
   for (let p of platforms) {
-    if (!p.destroyed &&
-      player.x < p.x + p.width &&
+    if (
       player.x + player.width > p.x &&
-      player.y + player.height < p.y + 10 &&
-      player.y + player.height + player.dy >= p.y) {
-      player.dy = 0;
+      player.x < p.x + p.width &&
+      player.y + player.height > p.y &&
+      player.y + player.height < p.y + p.height + player.dy &&
+      player.dy >= 0
+    ) {
       player.y = p.y - player.height;
+      player.dy = 0;
       player.onGround = true;
-      player.doubleJumpAvailable = true;
+
+      // Handle destructible platforms
       if (p.destructible) {
-        p.destroyed = true;
+        p.destructionTimer++;
+        if (p.destructionTimer > 30) {
+          platforms = platforms.filter(pl => pl !== p);
+        }
       }
     }
   }
 
-  const biome = getCurrentBiome();
-
-  if (player.y + player.height >= groundHeight) {
-    if (biome.groundType === 'lava') {
-      if (!player.shield) {
-        showDeathScreen();
-        return;
-      } else {
-        player.y = groundHeight - player.height;
-        player.dy = 0;
-        player.onGround = true;
-        player.shield = false;
-      }
-    } else if (biome.groundType === 'toxic') {
-      if (!player.shield) {
-        showDeathScreen();
-        return;
-      } else {
-        player.y = groundHeight - player.height;
-        player.dy = 0;
-        player.onGround = true;
-        player.shield = false;
-      }
+  // Collide with ground
+  if (player.y + player.height > groundHeight) {
+    if (biome.groundType === 'lava' && !player.invincible) {
+      showDeathScreen();
+    } else if (biome.groundType === 'toxic' && !player.invincible) {
+      // Toxic effect slows down player and damages over time
+      player.dx *= 0.7;
+      player.dy += 0.5;
     } else {
       player.y = groundHeight - player.height;
       player.dy = 0;
       player.onGround = true;
-      player.doubleJumpAvailable = true;
     }
   }
 
-  for (let coin of coins) {
-    if (!coin.collected &&
-      player.x < coin.x + 10 &&
-      player.x + player.width > coin.x &&
-      player.y < coin.y + 10 &&
-      player.y + player.height > coin.y) {
-      coin.collected = true;
+  // Check coins
+  for (let c of coins) {
+    if (!c.collected && player.x < c.x + 20 && player.x + player.width > c.x &&
+      player.y < c.y + 20 && player.y + player.height > c.y) {
+      c.collected = true;
       score++;
-      if (score >= 100) selectedSkinIndex = 1;
-      if (score >= 300) selectedSkinIndex = 2;
-      player.color = skins[selectedSkinIndex].color;
+      updateLeaderboard(playerName, score);
+      if (!achievements.firstCoin) achievements.firstCoin = true;
+      if (score >= 50) achievements.score50 = true;
+      if (score >= 100) achievements.score100 = true;
     }
   }
 
-  for (let lava of lavaDrops) {
-    lava.x += lava.dx;
-    lava.y += lava.dy;
-    if (
-      player.x < lava.x + lava.radius &&
-      player.x + player.width > lava.x - lava.radius &&
-      player.y < lava.y + lava.radius &&
-      player.y + player.height > lava.y - lava.radius) {
-      if (!player.shield) {
-        showDeathScreen();
-        return;
-      } else {
-        lavaDrops = lavaDrops.filter(l => l !== lava);
-        player.shield = false;
-      }
-    }
-  }
+  // Draw platforms
+  platforms.forEach(p => {
+    ctx.fillStyle = p.destructible ? 'darkorange' : biome.platformColor;
+    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height);
+  });
 
-  for (let enemy of enemies) {
-    enemy.x += enemy.dx;
-    if (
-      player.x < enemy.x + enemy.width &&
-      player.x + player.width > enemy.x &&
-      player.y < enemy.y + enemy.height &&
-      player.y + player.height > enemy.y) {
-      if (!player.shield) {
-        showDeathScreen();
-        return;
-      } else {
-        enemies = enemies.filter(e => e !== enemy);
-        player.shield = false;
-      }
-    }
-  }
-
-  for (let pUp of powerUps) {
-    if (!pUp.collected &&
-      player.x < pUp.x + pUp.radius &&
-      player.x + player.width > pUp.x - pUp.radius &&
-      player.y < pUp.y + pUp.radius &&
-      player.y + player.height > pUp.y - pUp.radius) {
-      pUp.collected = true;
-      if (pUp.type === 'shield') player.shield = true;
-      if (pUp.type === 'doubleJump') player.doubleJumpAvailable = true;
-      if (pUp.type === 'speed') player.speed = 8;
-      setTimeout(() => player.speed = 5, 8000);
-    }
-  }
-
-  cameraX = player.x - canvas.width / 2;
-  draw();
-  requestAnimationFrame(update);
-}
-
-function drawWeather() {
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  switch (weather) {
-    case 'rain':
-      for (let i = 0; i < 100; i++) {
-        let x = Math.random() * canvas.width;
-        let y = Math.random() * canvas.height;
-        ctx.fillRect(x, y, 1, 10);
-      }
-      break;
-    case 'snow':
-      for (let i = 0; i < 100; i++) {
-        let x = Math.random() * canvas.width;
-        let y = Math.random() * canvas.height;
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      break;
-    case 'sandstorm':
-      ctx.fillStyle = 'rgba(210,180,140,0.3)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      break;
-    case 'ash':
-      ctx.fillStyle = 'rgba(80,80,80,0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      break;
-    case 'fog':
-      ctx.fillStyle = 'rgba(34,139,34,0.4)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      break;
-  }
-}
-
-function draw() {
-  const biome = getCurrentBiome();
-  const offsetX = -cameraX;
-
-  ctx.fillStyle = biome.bg;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = biome.groundColor;
-  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight);
-
-  ctx.fillStyle = biome.platformColor;
-  for (let p of platforms) {
-    if (!p.destroyed) ctx.fillRect(p.x + offsetX, p.y, p.width, p.height);
-  }
-
-  ctx.fillStyle = 'yellow';
-  for (let coin of coins) {
-    if (!coin.collected) {
+  // Draw coins
+  coins.forEach(c => {
+    if (!c.collected) {
+      ctx.fillStyle = 'gold';
       ctx.beginPath();
-      ctx.arc(coin.x + offsetX, coin.y, 5, 0, Math.PI * 2);
+      ctx.arc(c.x - cameraX + 10, c.y + 10, 10, 0, Math.PI * 2);
       ctx.fill();
     }
-  }
+  });
 
-  ctx.fillStyle = 'orange';
-  for (let lava of lavaDrops) {
-    ctx.beginPath();
-    ctx.arc(lava.x + offsetX, lava.y, lava.radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // Draw player
+  ctx.fillStyle = player.invincible ? 'yellow' : player.color;
+  ctx.fillRect(player.x - cameraX, player.y, player.width, player.height);
 
-  ctx.fillStyle = 'purple';
-  for (let enemy of enemies) {
-    ctx.fillRect(enemy.x + offsetX, enemy.y, enemy.width, enemy.height);
-  }
-
-  ctx.fillStyle = 'cyan';
-  for (let pUp of powerUps) {
-    if (!pUp.collected) {
-      ctx.beginPath();
-      ctx.arc(pUp.x + offsetX, pUp.y, pUp.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  ctx.fillStyle = player.color;
-  ctx.fillRect(player.x + offsetX, player.y, player.width, player.height);
-
-  if (player.shield) {
-    ctx.strokeStyle = 'cyan';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(player.x + offsetX - 3, player.y - 3, player.width + 6, player.height + 6);
-  }
-
-  drawWeather();
-
-  ctx.fillStyle = 'white';
+  // Draw score
+  ctx.fillStyle = 'black';
   ctx.font = '20px Arial';
-  ctx.fillText(`Score: ${score}`, 10, 30);
-  ctx.fillText(`Nejlepší: ${highScore}`, 10, 60);
-  ctx.fillText(`Biom: ${biome.name}`, 10, 90);
-  ctx.fillText(`Počasí: ${weather}`, 10, 120);
-  ctx.fillText(`Skin: ${skins[selectedSkinIndex].name}`, 10, 150);
-}
+  ctx.fillText(`Skóre: ${score}`, 20, 30);
+  ctx.fillText(`Nejlepší skóre: ${highScore}`, 20, 60);
+  ctx.fillText(`Biom: ${biome.name}`, 20, 90);
 
-resetGame();
-update();
+  // Update power-up timer
+  if (player.powerUpTime > 0) {
+    player.powerUpTime--;
+  } else {
+    player.invincible = false;
+    player.highJump = false;
+  }
+
+  // Update camera position smoothly
+  cameraX += (player.x - cameraX - 100) * 0.05;
+
+  updateColorOptions();
+
+  if (document.getElementById('deathScreen').style.display !== 'flex') {
+    requestAnimationFrame(update);
+  }
+}
