@@ -69,37 +69,41 @@ function spawnLava() {
 setInterval(spawnLava, 1500);
 
 function generatePlatforms() {
-    const maxVerticalGap = 100; // max rozdíl výšky
-    const maxHorizontalGap = 200; // max vzdálenost
-  
-    let lastY = platforms.length ? platforms[platforms.length - 1].y : 350;
-  
-    while (lastPlatformX < player.x + 800) {
-      const height = 10;
-      const width = 100;
-  
-      const x = lastPlatformX + 100 + Math.random() * (maxHorizontalGap - 100);
-      let yOffset = (Math.random() - 0.5) * maxVerticalGap * 2;
-      let y = lastY + yOffset;
-  
-      // omez výšku do hranic
-      y = Math.max(150, Math.min(y, groundHeight - 50));
-  
-      platforms.push({ x, y, width, height });
-  
-      if (Math.random() < 0.5) {
-        coins.push({ x: x + 20 + Math.random() * 60, y: y - 30, collected: false });
-      }
-  
-      lastPlatformX = x;
-      lastY = y;
+  const maxVerticalGap = 100;
+  const maxHorizontalGap = 200;
+
+  let lastY = platforms.length ? platforms[platforms.length - 1].y : 350;
+
+  while (lastPlatformX < player.x + 800) {
+    const height = 10;
+    const width = 100;
+
+    const x = lastPlatformX + 100 + Math.random() * (maxHorizontalGap - 100);
+    let yOffset = (Math.random() - 0.5) * maxVerticalGap * 2;
+    let y = lastY + yOffset;
+    y = Math.max(150, Math.min(y, groundHeight - 50));
+
+    const biome = getCurrentBiome();
+    let type = 'normal';
+
+    if (biome.groundType === 'lava') type = 'lava';
+    if (biome.groundType === 'ice') type = 'ice';
+    if (biome.groundType === 'toxic') type = 'toxic';
+
+    platforms.push({ x, y, width, height, type, timeLeft: null });
+
+    if (Math.random() < 0.5) {
+      coins.push({ x: x + 20 + Math.random() * 60, y: y - 30, collected: false });
     }
-  
-    platforms = platforms.filter(p => p.x > player.x - 800);
-    coins = coins.filter(c => c.x > player.x - 800);
-    lavaDrops = lavaDrops.filter(l => l.y < canvas.height + 50 && l.x > cameraX - 50 && l.x < cameraX + canvas.width + 50);
+
+    lastPlatformX = x;
+    lastY = y;
   }
-  
+
+  platforms = platforms.filter(p => p.x > player.x - 800);
+  coins = coins.filter(c => c.x > player.x - 800);
+  lavaDrops = lavaDrops.filter(l => l.y < canvas.height + 50 && l.x > cameraX - 50 && l.x < cameraX + canvas.width + 50);
+}
 
 function showDeathScreen() {
   if (score > highScore) {
@@ -146,19 +150,44 @@ function update() {
 
   generatePlatforms();
 
-  player.onGround = false;
-  for (let p of platforms) {
-    if (
-      player.x < p.x + p.width &&
-      player.x + player.width > p.x &&
-      player.y + player.height < p.y + 10 &&
-      player.y + player.height + player.dy >= p.y
-    ) {
-      player.dy = 0;
-      player.y = p.y - player.height;
-      player.onGround = true;
+player.onGround = false;
+for (let p of platforms) {
+  const standingOn =
+    player.x < p.x + p.width &&
+    player.x + player.width > p.x &&
+    player.y + player.height < p.y + 10 &&
+    player.y + player.height + player.dy >= p.y;
+
+  if (standingOn) {
+    player.dy = 0;
+    player.y = p.y - player.height;
+    player.onGround = true;
+
+    if (p.type === 'lava' && p.timeLeft === null) {
+      p.timeLeft = 60; // platforma zmizí za 1 sekundu
+    }
+
+    if (p.type === 'toxic') {
+      score = Math.max(0, score - 0.05); // pomalá ztráta skóre
     }
   }
+
+  // zpracuj rozpad lávových platforem
+  if (p.type === 'lava' && p.timeLeft !== null) {
+    p.timeLeft--;
+  }
+}
+
+// filtruj zmizelé platformy
+platforms = platforms.filter(p => p.type !== 'lava' || p.timeLeft === null || p.timeLeft > 0);
+
+// změň tření na ledu
+const biome = getCurrentBiome();
+const frictionOverride = biome.groundType === 'ice' ? 0.97 : friction;
+
+if (keys.ArrowLeft) player.dx = -5;
+else if (keys.ArrowRight) player.dx = 5;
+else player.dx *= frictionOverride;
 
   const biome = getCurrentBiome();
 
