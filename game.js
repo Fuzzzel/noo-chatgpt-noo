@@ -155,11 +155,15 @@ function resetGame() {
 
 document.getElementById('restartBtn').addEventListener('click', resetGame);
 
-document.getElementById('startBtn').addEventListener('click', () => {
+function startGame() {
   resetGame();
+  hideMainMenu();
+  gameRunning = true;
   update();
-  document.getElementById('startBtn').style.display = 'none';
-  document.getElementById('deathScreen').style.display = 'none';
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  startGame();
 });
 
 
