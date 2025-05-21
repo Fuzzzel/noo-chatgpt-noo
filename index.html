@@ -1,40 +1,32 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <title>2D Mario Hra</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Platformer s Biomy a Power-upy</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="mainMenu" class="menu">
+    <h1>Vyber si barvu kostky</h1>
+    <select id="colorSelect">
+      <option value="red">Červená</option>
+      <option value="green">Zelená</option>
+      <option value="blue">Modrá</option>
+      <option value="gold" disabled>Zlatá (odemkne se při skóre 100)</option>
+    </select>
+    <button id="startGameBtn">Start hry</button>
 
-  <!-- HLAVNÍ MENU -->
-  <div id="mainMenu">
-    <h1>2D Mario Hra</h1>
-    <button id="startBtn">Start</button>
-
-    <div class="section">
-      <h2>Výběr barvy</h2>
-      <div id="colorSelector">
-        <button class="color-btn" data-color="red" style="background: red;"></button>
-        <button class="color-btn" data-color="blue" style="background: blue;"></button>
-        <button class="color-btn" data-color="green" style="background: green;"></button>
-        <button class="color-btn" data-color="gold" style="background: gold;" disabled title="Odemkne se při 100 skóre">🔒</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Leaderboard</h2>
-      <ul id="leaderboardList"></ul>
-    </div>
+    <h2>Leaderboard</h2>
+    <ol id="leaderboardList"></ol>
   </div>
 
-  <!-- HERNÍ PLOCHA -->
   <canvas id="gameCanvas" width="800" height="500"></canvas>
 
-  <!-- GAME OVER -->
-  <div id="deathScreen">
-    <h1>Game Over</h1>
-    <button id="restartBtn">Hrát znovu</button>
+  <div id="deathScreen" class="menu" style="display:none;">
+    <h1>Prohrál jsi!</h1>
+    <pre id="stats"></pre>
+    <button id="restartBtn">Restartovat</button>
   </div>
 
   <script src="game.js"></script>
