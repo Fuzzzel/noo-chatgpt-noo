@@ -8,11 +8,12 @@ body {
 
 canvas {
   display: block;
-  margin: 0 auto;
   background-color: #87ceeb;
-  border: 3px solid #333;
-  box-shadow: 0 0 15px rgba(0,0,0,0.3);
+  border: none;
+  width: 100vw;
+  height: 100vh;
 }
+
 
 .menu {
   position: fixed;
