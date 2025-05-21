@@ -1,328 +1,346 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById('gameCanvas')
+const ctx = canvas.getContext('2d')
 
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
+canvas.width = window.innerWidth
+canvas.height = window.innerHeight
 
-const keys = {
-  ArrowLeft: false,
-  ArrowRight: false,
-  Space: false,
-};
-
-document.addEventListener('keydown', e => {
-  if (e.code in keys) keys[e.code] = true;
-});
-document.addEventListener('keyup', e => {
-  if (e.code in keys) keys[e.code] = false;
-});
-
-let gameStarted = false;
-
-const player = {
-  x: 50,
-  y: 0,
-  width: 30,
-  height: 30,
-  dx: 0,
-  dy: 0,
-  color: 'red',
-  onGround: false,
-};
-
-const gravity = 0.8;
-const friction = 0.9;
-const jumpStrength = -15;
-
-let cameraX = 0;
-let platforms = [];
-let coins = [];
-let lavaDrops = [];
-
-let score = 0;
-let highScore = Number(localStorage.getItem('highScore')) || 0;
-let lastPlatformX = 0;
-let biomeIndex = 0;
-const biomeDistance = 1000;
-
-function getGroundHeight() {
-  return canvas.height - 30;
-}
-let groundHeight = getGroundHeight();
+let cameraX = 0
+const groundHeight = canvas.height * 0.8
+let gameStarted = false
 
 const biomes = [
-  { name: "Les", bg: '#87CEEB', platformColor: 'green', groundColor: '#228B22', groundType: 'safe' },
-  { name: "Poušť", bg: '#ffe4b5', platformColor: '#c2b280', groundColor: '#edc9af', groundType: 'safe' },
-  { name: "Láva", bg: '#330000', platformColor: '#ff4500', groundColor: 'darkred', groundType: 'lava' },
-  { name: "Led", bg: '#d0f0ff', platformColor: '#a0e9f0', groundColor: '#b0e0e6', groundType: 'ice' },
-  { name: "Toxický", bg: '#2f4f4f', platformColor: '#39ff14', groundColor: '#006400', groundType: 'toxic' },
-];
+  {
+    name: 'Les',
+    bg: '#88c070',
+    platformColor: '#3a5a20',
+    groundColor: '#2e4d14',
+    floorType: 'water'
+  },
+  {
+    name: 'Poušť',
+    bg: '#d6b451',
+    platformColor: '#c9a15a',
+    groundColor: '#b2873c',
+    floorType: 'sand'
+  },
+  {
+    name: 'Láva',
+    bg: '#d44242',
+    platformColor: '#8b1c1c',
+    groundColor: '#661010',
+    floorType: 'lava'
+  },
+  {
+    name: 'Led',
+    bg: '#7ad0ff',
+    platformColor: '#3b6ca5',
+    groundColor: '#23548b',
+    floorType: 'ice'
+  },
+  {
+    name: 'Toxický',
+    bg: '#52a852',
+    platformColor: '#2e8f2e',
+    groundColor: '#236023',
+    floorType: 'toxic'
+  }
+]
+
+const biomeDistance = 2000
+let platforms = []
+let player = {
+  x: 100,
+  y: groundHeight - 50,
+  width: 50,
+  height: 50,
+  dy: 0,
+  onGround: false,
+  color: 'gold'
+}
+
+const gravity = 0.7
+const jumpPower = -15
+
+let fadeAlpha = 0
+let fading = false
+let fadeFromBiome, fadeToBiome
+
+const weatherParticles = []
+
+function lerpColor(a, b, t) {
+  a = a.replace('#', '')
+  b = b.replace('#', '')
+  const ar = parseInt(a.substring(0, 2), 16)
+  const ag = parseInt(a.substring(2, 4), 16)
+  const ab = parseInt(a.substring(4, 6), 16)
+  const br = parseInt(b.substring(0, 2), 16)
+  const bg = parseInt(b.substring(2, 4), 16)
+  const bb = parseInt(b.substring(4, 6), 16)
+
+  const rr = Math.round(ar + (br - ar) * t)
+  const rg = Math.round(ag + (bg - ag) * t)
+  const rb = Math.round(ab + (bb - ab) * t)
+
+  return `rgb(${rr},${rg},${rb})`
+}
+
+function hexToRgb(hex) {
+  hex = hex.replace('#', '')
+  let r = parseInt(hex.substring(0, 2), 16)
+  let g = parseInt(hex.substring(2, 4), 16)
+  let b = parseInt(hex.substring(4, 6), 16)
+  return `${r},${g},${b}`
+}
 
 function getCurrentBiome() {
-  biomeIndex = Math.floor(player.x / biomeDistance) % biomes.length;
-  return biomes[biomeIndex];
+  let index = Math.floor(player.x / biomeDistance) % biomes.length
+  if (index < 0) index += biomes.length
+  return biomes[index]
 }
 
-function spawnLava() {
-  const speedX = (Math.random() - 0.5) * 2; 
-  const speedY = 2 + Math.random() * 3;      
-  lavaDrops.push({
-    x: cameraX + Math.random() * canvas.width,
-    y: 0,
-    radius: 10,
-    dx: speedX,
-    dy: speedY,
-  });
+function updateFade() {
+  const currentBiomeIndex = Math.floor(player.x / biomeDistance)
+  const biomePosInSegment = (player.x % biomeDistance) / biomeDistance
+
+  if (biomePosInSegment > 0.8) {
+    fading = true
+    fadeAlpha = (biomePosInSegment - 0.8) / 0.2
+    fadeFromBiome = biomes[currentBiomeIndex % biomes.length]
+    fadeToBiome = biomes[(currentBiomeIndex + 1) % biomes.length]
+  } else {
+    fading = false
+    fadeAlpha = 0
+  }
 }
 
-let lavaInterval;
-
-function startLavaSpawn() {
-  lavaInterval = setInterval(spawnLava, 1500);
+function spawnWeatherParticle(biome) {
+  switch (biome.name) {
+    case 'Les':
+      weatherParticles.push({
+        x: cameraX + Math.random() * canvas.width,
+        y: -10,
+        dy: 1 + Math.random() * 1,
+        dx: (Math.random() - 0.5) * 0.5,
+        size: 3 + Math.random() * 3,
+        color: 'rgba(50, 150, 50, 0.6)',
+        type: 'leaf'
+      })
+      break
+    case 'Poušť':
+      weatherParticles.push({
+        x: cameraX + Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        dy: 0,
+        dx: 1 + Math.random() * 2,
+        size: 1 + Math.random() * 2,
+        color: 'rgba(210,180,140,0.5)',
+        type: 'sand'
+      })
+      break
+    case 'Láva':
+      weatherParticles.push({
+        x: cameraX + Math.random() * canvas.width,
+        y: canvas.height,
+        dy: -2 - Math.random() * 2,
+        dx: (Math.random() - 0.5) * 1,
+        size: 2 + Math.random() * 3,
+        color: 'rgba(255, 69, 0, 0.8)',
+        type: 'spark'
+      })
+      break
+    case 'Led':
+      weatherParticles.push({
+        x: cameraX + Math.random() * canvas.width,
+        y: -10,
+        dy: 1 + Math.random() * 2,
+        dx: (Math.random() - 0.5) * 0.3,
+        size: 3 + Math.random() * 3,
+        color: 'rgba(230, 230, 255, 0.8)',
+        type: 'snow'
+      })
+      break
+    case 'Toxický':
+      weatherParticles.push({
+        x: cameraX + Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        dy: 0,
+        dx: 0.2 + Math.random() * 0.5,
+        size: 5 + Math.random() * 5,
+        color: 'rgba(57, 255, 20, 0.3)',
+        type: 'bubble'
+      })
+      break
+  }
 }
 
-function stopLavaSpawn() {
-  clearInterval(lavaInterval);
+function updateWeather() {
+  const biome = getCurrentBiome()
+  for (let i = 0; i < 3; i++) spawnWeatherParticle(biome)
+  for (let i = weatherParticles.length - 1; i >= 0; i--) {
+    const p = weatherParticles[i]
+    p.x += p.dx
+    p.y += p.dy
+    if (
+      p.y > canvas.height + 20 ||
+      p.y < -20 ||
+      p.x < cameraX - 50 ||
+      p.x > cameraX + canvas.width + 50
+    ) weatherParticles.splice(i, 1)
+  }
 }
 
-function generatePlatforms() {
-  const maxVerticalGap = 100;
-  const maxHorizontalGap = 200;
-
-  let lastY = platforms.length ? platforms[platforms.length - 1].y : groundHeight - 120;
-
-  while (lastPlatformX < player.x + canvas.width + 200) {
-    const height = 10;
-    const width = 100;
-
-    const x = lastPlatformX + 100 + Math.random() * (maxHorizontalGap - 100);
-    let yOffset = (Math.random() - 0.5) * maxVerticalGap * 2;
-    let y = lastY + yOffset;
-
-    y = Math.max(150, Math.min(y, groundHeight - 50));
-
-    platforms.push({ x, y, width, height });
-
-    if (Math.random() < 0.5) {
-      coins.push({ x: x + 20 + Math.random() * 60, y: y - 30, collected: false });
+function drawWeather() {
+  ctx.save()
+  ctx.translate(-cameraX, 0)
+  for (let p of weatherParticles) {
+    ctx.fillStyle = p.color
+    switch (p.type) {
+      case 'leaf':
+        ctx.beginPath()
+        ctx.ellipse(p.x, p.y, p.size, p.size / 2, Math.sin(p.x), 0, 2 * Math.PI)
+        ctx.fill()
+        break
+      case 'sand':
+        ctx.fillRect(p.x, p.y, p.size, p.size / 2)
+        break
+      case 'spark':
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+        ctx.fill()
+        break
+      case 'snow':
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
+        ctx.fill()
+        break
+      case 'bubble':
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
+        ctx.fill()
+        break
     }
-
-    lastPlatformX = x;
-    lastY = y;
   }
-
-  platforms = platforms.filter(p => p.x > player.x - canvas.width - 200);
-  coins = coins.filter(c => c.x > player.x - canvas.width - 200);
-  lavaDrops = lavaDrops.filter(l => l.y < canvas.height + 50 && l.x > cameraX - 50 && l.x < cameraX + canvas.width + 50);
+  ctx.restore()
 }
 
-function showDeathScreen() {
-  if (score > highScore) {
-    highScore = score;
-    localStorage.setItem('highScore', highScore);
+function drawFadeOverlay() {
+  if (!fading) return
+  ctx.save()
+  ctx.globalAlpha = fadeAlpha
+  const bgColor = lerpColor(fadeFromBiome.bg, fadeToBiome.bg, fadeAlpha)
+  ctx.fillStyle = bgColor
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = `rgba(${hexToRgb(fadeToBiome.groundColor)}, ${fadeAlpha})`
+  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight)
+  for (let p of platforms) {
+    ctx.fillStyle = `rgba(${hexToRgb(fadeToBiome.platformColor)}, ${fadeAlpha})`
+    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height)
   }
-  document.getElementById('deathScreen').style.display = 'flex';
-  stopLavaSpawn();
+  ctx.restore()
 }
 
-function hideDeathScreen() {
-  document.getElementById('deathScreen').style.display = 'none';
+function createPlatforms() {
+  platforms = []
+  for (let i = 0; i < 100; i++) {
+    let biomeIndex = Math.floor((i * 200) / biomeDistance) % biomes.length
+    let biome = biomes[biomeIndex]
+    platforms.push({
+      x: i * 200,
+      y: groundHeight - 20 - Math.sin(i / 3) * 30,
+      width: 150,
+      height: 20,
+      biome: biome
+    })
+  }
 }
 
-function resetGame() {
-  player.x = 50;
-  player.y = groundHeight - player.height;
-  player.dx = 0;
-  player.dy = 0;
-  score = 0;
-  cameraX = 0;
-  lastPlatformX = 0;
-  platforms = [];
-  coins = [];
-  lavaDrops = [];
-  generatePlatforms();
-  hideDeathScreen();
-  startLavaSpawn();
-  gameStarted = true;
+function drawPlatforms() {
+  const biome = getCurrentBiome()
+  for (let p of platforms) {
+    if (p.x + p.width < cameraX - 100 || p.x > cameraX + canvas.width + 100) continue
+    ctx.fillStyle = p.biome.platformColor
+    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height)
+  }
+  // podlaha podle biomu
+  ctx.fillStyle = biome.groundColor
+  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight)
 }
 
-document.getElementById('startBtn').addEventListener('click', () => {
-  const colorSelect = document.getElementById('colorSelect');
-  player.color = colorSelect.value === 'gold' && score < 100 ? 'red' : colorSelect.value;
-  if (colorSelect.value === 'gold' && score < 100) {
-    alert("Zlatá barva se odemkne po dosažení skóre 100!");
-    return;
-  }
-  document.getElementById('mainMenu').style.display = 'none';
-  resetGame();
-  updateLeaderboardUI();
-  update();
-});
+function drawPlayer() {
+  ctx.fillStyle = player.color
+  ctx.fillRect(player.x - cameraX, player.y, player.width, player.height)
+}
 
-document.getElementById('restartBtn').addEventListener('click', () => {
-  document.getElementById('deathScreen').style.display = 'none';
-  resetGame();
-});
+function updatePlayer() {
+  player.dy += gravity
+  player.y += player.dy
 
-function update() {
-  if (!gameStarted) return;
-
-  if (keys.ArrowLeft) player.dx = -5;
-  else if (keys.ArrowRight) player.dx = 5;
-  else player.dx *= friction;
-
-  if (keys.Space && player.onGround) {
-    player.dy = jumpStrength;
-    player.onGround = false;
-  }
-
-  player.dy += gravity;
-  player.x += player.dx;
-  player.y += player.dy;
-
-  generatePlatforms();
-
-  player.onGround = false;
+  player.onGround = false
   for (let p of platforms) {
     if (
-      player.x < p.x + p.width &&
       player.x + player.width > p.x &&
-      player.y + player.height < p.y + 10 &&
-      player.y + player.height + player.dy >= p.y
+      player.x < p.x + p.width &&
+      player.y + player.height >= p.y &&
+      player.y + player.height <= p.y + p.height + Math.abs(player.dy)
     ) {
-      player.dy = 0;
-      player.y = p.y - player.height;
-      player.onGround = true;
+      player.y = p.y - player.height
+      player.dy = 0
+      player.onGround = true
     }
   }
-
-  const biome = getCurrentBiome();
-
-  if (player.y + player.height >= groundHeight) {
-    if (biome.groundType !== 'safe') {
-      showDeathScreen();
-      return;
-    } else {
-      player.y = groundHeight - player.height;
-      player.dy = 0;
-      player.onGround = true;
-    }
+  if (!player.onGround && player.y + player.height > groundHeight) {
+    player.y = groundHeight - player.height
+    player.dy = 0
+    player.onGround = true
   }
+}
 
-  for (let coin of coins) {
-    if (!coin.collected &&
-      player.x < coin.x + 10 &&
-      player.x + player.width > coin.x &&
-      player.y < coin.y + 10 &&
-      player.y + player.height > coin.y) {
-      coin.collected = true;
-      score++;
-    }
-  }
-
-  for (let lava of lavaDrops) {
-    lava.x += lava.dx;
-    lava.y += lava.dy;
-    if (
-      player.x < lava.x + lava.radius &&
-      player.x + player.width > lava.x - lava.radius &&
-      player.y < lava.y + lava.radius &&
-      player.y + player.height > lava.y - lava.radius
-    ) {
-      showDeathScreen();
-      return;
-    }
-  }
-
-  cameraX = player.x - canvas.width / 2;
-  draw();
-  requestAnimationFrame(update);
+function updateCamera() {
+  cameraX = player.x - canvas.width / 4
+  if (cameraX < 0) cameraX = 0
 }
 
 function draw() {
-  const biome = getCurrentBiome();
-  const offsetX = -cameraX;
+  const biome = getCurrentBiome()
+  ctx.fillStyle = biome.bg
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-  ctx.fillStyle = biome.bg;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = biome.groundColor;
-  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight);
-
-  ctx.fillStyle = biome.platformColor;
-  for (let p of platforms) {
-    ctx.fillRect(p.x + offsetX, p.y, p.width, p.height);
-  }
-
-  ctx.fillStyle = 'yellow';
-  for (let coin of coins) {
-    if (!coin.collected) {
-      ctx.beginPath();
-      ctx.arc(coin.x + offsetX, coin.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  ctx.fillStyle = 'orange';
-  for (let lava of lavaDrops) {
-    ctx.beginPath();
-    ctx.arc(lava.x + offsetX, lava.y, lava.radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.fillStyle = player.color;
-  ctx.fillRect(player.x + offsetX, player.y, player.width, player.height);
-
-  ctx.fillStyle = 'white';
-  ctx.font = '20px Arial';
-  ctx.fillText(`Score: ${score}`, 10, 30);
-  ctx.fillText(`Nejlepší: ${highScore}`, 10, 60);
-  ctx.fillText(`Biom: ${biome.name}`, 10, 90);
+  drawPlatforms()
+  drawPlayer()
 }
 
-function updateLeaderboardUI() {
-  const leaderboardList = document.getElementById('leaderboardList');
-  leaderboardList.innerHTML = '';
-  const leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
-  leaderboard.sort((a,b) => b.score - a.score);
-  leaderboard.slice(0, 10).forEach(entry => {
-    const li = document.createElement('li');
-    li.textContent = `${entry.name}: ${entry.score}`;
-    leaderboardList.appendChild(li);
-  });
-}
-
-function generateRandomName() {
-  const adjectives = ['Rychlý', 'Silný', 'Šťastný', 'Divoký', 'Mocný', 'Zářivý'];
-  const nouns = ['Lev', 'Tygr', 'Orlice', 'Vlčák', 'Jaguár', 'Havran'];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  return `${adj} ${noun}`;
-}
-
-function saveScoreToLeaderboard(score) {
-  let leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
-  if (!leaderboard.find(e => e.name === playerName)) {
-    leaderboard.push({ name: playerName, score });
-  } else {
-    leaderboard = leaderboard.map(e => {
-      if (e.name === playerName && score > e.score) return { name: playerName, score };
-      return e;
-    });
+function jump() {
+  if (player.onGround) {
+    player.dy = jumpPower
+    player.onGround = false
   }
-  localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
 }
 
-const playerName = generateRandomName();
+document.addEventListener('keydown', (e) => {
+  if (!gameStarted) return
+  if (e.code === 'Space' || e.code === 'ArrowUp') jump()
+})
 
-showMainMenu();
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (!gameStarted) {
+    gameStarted = true
+    player.x = 100
+    player.y = groundHeight - player.height
+    player.dy = 0
+    createPlatforms()
+    weatherParticles.length = 0
+    requestAnimationFrame(update)
+  }
+})
 
-function showMainMenu() {
-  document.getElementById('mainMenu').style.display = 'flex';
-  document.getElementById('deathScreen').style.display = 'none';
-  updateLeaderboardUI();
+function update() {
+  if (!gameStarted) return
+  updatePlayer()
+  updateCamera()
+  updateFade()
+  updateWeather()
+  draw()
+  drawWeather()
+  drawFadeOverlay()
+  requestAnimationFrame(update)
 }
