@@ -1,369 +1,355 @@
-const canvas = document.getElementById('gameCanvas')
-const ctx = canvas.getContext('2d')
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
+const keys = {
+  ArrowLeft: false,
+  ArrowRight: false,
+  Space: false,
+};
 
-let cameraX = 0
-const groundHeight = canvas.height * 0.8
-let gameStarted = false
+document.addEventListener('keydown', e => {
+  if (e.code in keys) keys[e.code] = true;
+});
+document.addEventListener('keyup', e => {
+  if (e.code in keys) keys[e.code] = false;
+});
+
+const player = {
+  x: 50,
+  y: 400,
+  width: 30,
+  height: 30,
+  dx: 0,
+  dy: 0,
+  color: 'red',
+  onGround: false,
+};
+
+const gravity = 0.8;
+const friction = 0.9;
+const jumpStrength = -15;
+
+let cameraX = 0;
+let platforms = [];
+let coins = [];
+let weatherParticles = [];
+
+let score = 0;
+let highScore = Number(localStorage.getItem('highScore')) || 0;
+let lastPlatformX = 0;
+const groundHeight = 470;
 
 const biomes = [
-  {
-    name: 'Les',
-    bg: '#88c070',
-    platformColor: '#3a5a20',
-    groundColor: '#2e4d14',
-    floorType: 'water'
-  },
-  {
-    name: 'Poušť',
-    bg: '#d6b451',
-    platformColor: '#c9a15a',
-    groundColor: '#b2873c',
-    floorType: 'sand'
-  },
-  {
-    name: 'Láva',
-    bg: '#d44242',
-    platformColor: '#8b1c1c',
-    groundColor: '#661010',
-    floorType: 'lava'
-  },
-  {
-    name: 'Led',
-    bg: '#7ad0ff',
-    platformColor: '#3b6ca5',
-    groundColor: '#23548b',
-    floorType: 'ice'
-  },
-  {
-    name: 'Toxický',
-    bg: '#52a852',
-    platformColor: '#2e8f2e',
-    groundColor: '#236023',
-    floorType: 'toxic'
-  }
-]
-
-const biomeDistance = 2000
-let platforms = []
-let player = {
-  x: 100,
-  y: groundHeight - 50,
-  width: 50,
-  height: 50,
-  dy: 0,
-  dx: 0,
-  onGround: false,
-  color: 'gold',
-  speed: 5
-}
-
-const gravity = 0.7
-const jumpPower = -15
-
-let fadeAlpha = 0
-let fading = false
-let fadeFromBiome, fadeToBiome
-
-const weatherParticles = []
-
-let keys = {}
-
-function lerpColor(a, b, t) {
-  a = a.replace('#', '')
-  b = b.replace('#', '')
-  const ar = parseInt(a.substring(0, 2), 16)
-  const ag = parseInt(a.substring(2, 4), 16)
-  const ab = parseInt(a.substring(4, 6), 16)
-  const br = parseInt(b.substring(0, 2), 16)
-  const bg = parseInt(b.substring(2, 4), 16)
-  const bb = parseInt(b.substring(4, 6), 16)
-
-  const rr = Math.round(ar + (br - ar) * t)
-  const rg = Math.round(ag + (bg - ag) * t)
-  const rb = Math.round(ab + (bb - ab) * t)
-
-  return `rgb(${rr},${rg},${rb})`
-}
-
-function hexToRgb(hex) {
-  hex = hex.replace('#', '')
-  let r = parseInt(hex.substring(0, 2), 16)
-  let g = parseInt(hex.substring(2, 4), 16)
-  let b = parseInt(hex.substring(4, 6), 16)
-  return `${r},${g},${b}`
-}
+  { name: "Les", bg: '#87CEEB', platformColor: 'green', groundColor: '#228B22', groundType: 'safe', weather: 'rain' },
+  { name: "Poušť", bg: '#ffe4b5', platformColor: '#c2b280', groundColor: '#edc9af', groundType: 'safe', weather: null },
+  { name: "Láva", bg: '#330000', platformColor: '#ff4500', groundColor: 'darkred', groundType: 'lava', weather: 'lavaDrops' },
+  { name: "Led", bg: '#d0f0ff', platformColor: '#a0e9f0', groundColor: '#b0e0e6', groundType: 'ice', weather: 'snow' },
+  { name: "Toxický", bg: '#2f4f4f', platformColor: '#39ff14', groundColor: '#006400', groundType: 'toxic', weather: 'toxicDrops' },
+];
 
 function getCurrentBiome() {
-  let index = Math.floor(player.x / biomeDistance) % biomes.length
-  if (index < 0) index += biomes.length
-  return biomes[index]
+  const idx = Math.floor(player.x / 1000) % biomes.length;
+  return biomes[idx];
 }
 
-function updateFade() {
-  const currentBiomeIndex = Math.floor(player.x / biomeDistance)
-  const biomePosInSegment = (player.x % biomeDistance) / biomeDistance
+function lerpColor(a, b, t) {
+  // linear interpolation between two hex colors a and b, t in [0,1]
+  const c1 = hexToRgb(a);
+  const c2 = hexToRgb(b);
+  const r = Math.round(c1.r + (c2.r - c1.r) * t);
+  const g = Math.round(c1.g + (c2.g - c1.g) * t);
+  const b_ = Math.round(c1.b + (c2.b - c1.b) * t);
+  return `rgb(${r},${g},${b_})`;
+}
+function hexToRgb(hex) {
+  const bigint = parseInt(hex.replace('#',''),16);
+  return {
+    r: (bigint >> 16) & 255,
+    g: (bigint >> 8) & 255,
+    b: bigint & 255
+  };
+}
 
-  if (biomePosInSegment > 0.8) {
-    fading = true
-    fadeAlpha = (biomePosInSegment - 0.8) / 0.2
-    fadeFromBiome = biomes[currentBiomeIndex % biomes.length]
-    fadeToBiome = biomes[(currentBiomeIndex + 1) % biomes.length]
-  } else {
-    fading = false
-    fadeAlpha = 0
+function getBiomeTransitionColor() {
+  const playerPos = player.x;
+  const biomeIndex = Math.floor(playerPos / 1000);
+  const nextBiomeIndex = (biomeIndex + 1) % biomes.length;
+  const t = (playerPos % 1000) / 1000;
+  const currentBiome = biomes[biomeIndex % biomes.length];
+  const nextBiome = biomes[nextBiomeIndex];
+  return lerpColor(currentBiome.bg, nextBiome.bg, t);
+}
+
+function generatePlatforms() {
+  const maxVerticalGap = 80;
+  const maxHorizontalGap = 150; // tak aby se doskočilo
+  let lastY = platforms.length ? platforms[platforms.length - 1].y : 350;
+
+  while (lastPlatformX < player.x + 800) {
+    const width = 100;
+    // Horizontální vzdálenost max 150 (alespoň tak, aby se dalo doskočit)
+    const x = lastPlatformX + 70 + Math.random() * (maxHorizontalGap - 70);
+    let yOffset = (Math.random() - 0.5) * maxVerticalGap * 2;
+    let y = lastY + yOffset;
+
+    y = Math.max(150, Math.min(y, groundHeight - 50));
+
+    platforms.push({ x, y, width, height: 10 });
+
+    // Přidej max jednu minci na platformu
+    if (Math.random() < 0.5) {
+      coins.push({ x: x + width / 2, y: y - 20, collected: false });
+    }
+
+    lastPlatformX = x;
+    lastY = y;
+  }
+
+  // Odstraň platformy daleko za hráčem
+  platforms = platforms.filter(p => p.x > player.x - 800);
+  coins = coins.filter(c => c.x > player.x - 800);
+}
+
+function updatePlayer() {
+  if (keys.ArrowLeft) player.dx = -5;
+  else if (keys.ArrowRight) player.dx = 5;
+  else player.dx *= friction;
+
+  if (keys.Space && player.onGround) {
+    player.dy = jumpStrength;
+    player.onGround = false;
+  }
+
+  player.dy += gravity;
+
+  // Pokud je v ledovém biomu, sníž tření, tedy klouzání
+  if (getCurrentBiome().groundType === 'ice') {
+    player.dx *= 0.98;
+  }
+
+  player.x += player.dx;
+  player.y += player.dy;
+
+  player.onGround = false;
+
+  for (let p of platforms) {
+    if (
+      player.x < p.x + p.width &&
+      player.x + player.width > p.x &&
+      player.y + player.height <= p.y + 10 &&
+      player.y + player.height + player.dy >= p.y
+    ) {
+      player.dy = 0;
+      player.y = p.y - player.height;
+      player.onGround = true;
+    }
+  }
+
+  // Kolize se zemí (podlahou podle biomu)
+  const biome = getCurrentBiome();
+  if (player.y + player.height >= groundHeight) {
+    if (biome.groundType !== 'safe') {
+      showDeathScreen();
+      return;
+    } else {
+      player.y = groundHeight - player.height;
+      player.dy = 0;
+      player.onGround = true;
+    }
+  }
+
+  // Sbírání mincí
+  for (let coin of coins) {
+    if (
+      !coin.collected &&
+      player.x < coin.x + 10 &&
+      player.x + player.width > coin.x &&
+      player.y < coin.y + 10 &&
+      player.y + player.height > coin.y
+    ) {
+      coin.collected = true;
+      score++;
+    }
   }
 }
 
-function spawnWeatherParticle(biome) {
-  switch (biome.name) {
-    case 'Les':
-      weatherParticles.push({
-        x: cameraX + Math.random() * canvas.width,
-        y: -10,
-        dy: 1 + Math.random() * 1,
-        dx: (Math.random() - 0.5) * 0.5,
-        size: 3 + Math.random() * 3,
-        color: 'rgba(50, 150, 50, 0.6)',
-        type: 'leaf'
-      })
-      break
-    case 'Poušť':
-      weatherParticles.push({
-        x: cameraX + Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        dy: 0,
-        dx: 1 + Math.random() * 2,
-        size: 1 + Math.random() * 2,
-        color: 'rgba(210,180,140,0.5)',
-        type: 'sand'
-      })
-      break
-    case 'Láva':
-      weatherParticles.push({
-        x: cameraX + Math.random() * canvas.width,
-        y: canvas.height,
-        dy: -2 - Math.random() * 2,
-        dx: (Math.random() - 0.5) * 1,
-        size: 2 + Math.random() * 3,
-        color: 'rgba(255, 69, 0, 0.8)',
-        type: 'spark'
-      })
-      break
-    case 'Led':
-      weatherParticles.push({
-        x: cameraX + Math.random() * canvas.width,
-        y: -10,
-        dy: 1 + Math.random() * 2,
-        dx: (Math.random() - 0.5) * 0.3,
-        size: 3 + Math.random() * 3,
-        color: 'rgba(230, 230, 255, 0.8)',
-        type: 'snow'
-      })
-      break
-    case 'Toxický':
-      weatherParticles.push({
-        x: cameraX + Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        dy: 0,
-        dx: 0.2 + Math.random() * 0.5,
-        size: 5 + Math.random() * 5,
-        color: 'rgba(57, 255, 20, 0.3)',
-        type: 'bubble'
-      })
-      break
+function updateCamera() {
+  cameraX = player.x - canvas.width / 2;
+}
+
+function drawPlatforms() {
+  const biome = getCurrentBiome();
+  const offsetX = -cameraX;
+  ctx.fillStyle = biome.platformColor;
+  for (let p of platforms) {
+    ctx.fillRect(p.x + offsetX, p.y, p.width, p.height);
   }
+}
+
+function drawCoins() {
+  const offsetX = -cameraX;
+  ctx.fillStyle = 'yellow';
+  for (let coin of coins) {
+    if (!coin.collected) {
+      ctx.beginPath();
+      ctx.arc(coin.x + offsetX, coin.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawPlayer() {
+  const offsetX = -cameraX;
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x + offsetX, player.y, player.width, player.height);
+}
+
+function drawGround() {
+  const biome = getCurrentBiome();
+  const offsetX = 0;
+  ctx.fillStyle = biome.groundColor;
+  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight);
+}
+
+function drawScore() {
+  ctx.fillStyle = 'white';
+  ctx.font = '20px Arial';
+  ctx.fillText(`Skóre: ${score}`, 10, 30);
+  ctx.fillText(`Nejlepší: ${highScore}`, 10, 60);
+  ctx.fillText(`Biom: ${getCurrentBiome().name}`, 10, 90);
+}
+
+function showDeathScreen() {
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('highScore', highScore);
+  }
+  document.getElementById('deathScreen').style.display = 'flex';
+}
+
+function hideDeathScreen() {
+  document.getElementById('deathScreen').style.display = 'none';
+}
+
+function resetGame() {
+  player.x = 50;
+  player.y = 400;
+  player.dx = 0;
+  player.dy = 0;
+  score = 0;
+  cameraX = 0;
+  lastPlatformX = 0;
+  platforms = [];
+  coins = [];
+  generatePlatforms();
+  hideDeathScreen();
 }
 
 function updateWeather() {
-  const biome = getCurrentBiome()
-  for (let i = 0; i < 3; i++) spawnWeatherParticle(biome)
-  for (let i = weatherParticles.length - 1; i >= 0; i--) {
-    const p = weatherParticles[i]
-    p.x += p.dx
-    p.y += p.dy
-    if (
-      p.y > canvas.height + 20 ||
-      p.y < -20 ||
-      p.x < cameraX - 50 ||
-      p.x > cameraX + canvas.width + 50
-    ) weatherParticles.splice(i, 1)
+  const biome = getCurrentBiome();
+
+  weatherParticles = weatherParticles.filter(p => p.y < canvas.height);
+
+  if (biome.weather === 'rain') {
+    if (Math.random() < 0.2) {
+      weatherParticles.push({
+        x: Math.random() * canvas.width,
+        y: 0,
+        dy: 4 + Math.random() * 4,
+        type: 'rain',
+      });
+    }
+  } else if (biome.weather === 'snow') {
+    if (Math.random() < 0.1) {
+      weatherParticles.push({
+        x: Math.random() * canvas.width,
+        y: 0,
+        dy: 1 + Math.random() * 2,
+        type: 'snow',
+      });
+    }
+  } else if (biome.weather === 'lavaDrops') {
+    if (Math.random() < 0.15) {
+      weatherParticles.push({
+        x: Math.random() * canvas.width,
+        y: 0,
+        dy: 5 + Math.random() * 3,
+        type: 'lava',
+        radius: 10,
+        dx: (Math.random() - 0.5) * 2,
+      });
+    }
+  } else if (biome.weather === 'toxicDrops') {
+    if (Math.random() < 0.15) {
+      weatherParticles.push({
+        x: Math.random() * canvas.width,
+        y: 0,
+        dy: 3 + Math.random() * 2,
+        type: 'toxic',
+        radius: 8,
+        dx: (Math.random() - 0.5) * 1,
+      });
+    }
+  }
+
+  for (let p of weatherParticles) {
+    p.x += p.dx || 0;
+    p.y += p.dy;
   }
 }
 
 function drawWeather() {
-  ctx.save()
-  ctx.translate(-cameraX, 0)
+  const offsetX = 0;
   for (let p of weatherParticles) {
-    ctx.fillStyle = p.color
-    switch (p.type) {
-      case 'leaf':
-        ctx.beginPath()
-        ctx.ellipse(p.x, p.y, p.size, p.size / 2, Math.sin(p.x), 0, 2 * Math.PI)
-        ctx.fill()
-        break
-      case 'sand':
-        ctx.fillRect(p.x, p.y, p.size, p.size / 2)
-        break
-      case 'spark':
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-        ctx.fill()
-        break
-      case 'snow':
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
-        ctx.fill()
-        break
-      case 'bubble':
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2)
-        ctx.fill()
-        break
+    if (p.type === 'rain') {
+      ctx.strokeStyle = 'rgba(173,216,230,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(p.x + offsetX, p.y);
+      ctx.lineTo(p.x + offsetX, p.y + 10);
+      ctx.stroke();
+    } else if (p.type === 'snow') {
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(p.x + offsetX, p.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.type === 'lava') {
+      ctx.fillStyle = 'orange';
+      ctx.beginPath();
+      ctx.arc(p.x + offsetX, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.type === 'toxic') {
+      ctx.fillStyle = '#39ff14';
+      ctx.beginPath();
+      ctx.arc(p.x + offsetX, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-  ctx.restore()
 }
 
-function drawFadeOverlay() {
-  if (!fading) return
-  ctx.save()
-  ctx.globalAlpha = fadeAlpha
-  const bgColor = lerpColor(fadeFromBiome.bg, fadeToBiome.bg, fadeAlpha)
-  ctx.fillStyle = bgColor
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = `rgba(${hexToRgb(fadeToBiome.groundColor)}, ${fadeAlpha})`
-  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight)
-  for (let p of platforms) {
-    ctx.fillStyle = `rgba(${hexToRgb(fadeToBiome.platformColor)}, ${fadeAlpha})`
-    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height)
-  }
-  ctx.restore()
+function gameLoop() {
+  updatePlayer();
+  updateCamera();
+  generatePlatforms();
+  updateWeather();
+
+  // Pozadí s plynulým přechodem mezi biomy (bez fade overlay, prostě přímý lerp barev)
+  const bgColor = getBiomeTransitionColor();
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawGround();
+  drawPlatforms();
+  drawCoins();
+  drawPlayer();
+  drawWeather();
+  drawScore();
+
+  requestAnimationFrame(gameLoop);
 }
 
-function createPlatforms() {
-  platforms = []
-  for (let i = 0; i < 100; i++) {
-    let biomeIndex = Math.floor((i * 200) / biomeDistance) % biomes.length
-    let biome = biomes[biomeIndex]
-    platforms.push({
-      x: i * 200,
-      y: groundHeight - 20 - Math.sin(i / 3) * 30,
-      width: 150,
-      height: 20,
-      biome: biome
-    })
-  }
-}
+document.getElementById('restartBtn').addEventListener('click', () => {
+  resetGame();
+});
 
-function drawPlatforms() {
-  const biome = getCurrentBiome()
-  for (let p of platforms) {
-    if (p.x + p.width < cameraX - 100 || p.x > cameraX + canvas.width + 100) continue
-    ctx.fillStyle = p.biome.platformColor
-    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height)
-  }
-  ctx.fillStyle = biome.groundColor
-  ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight)
-}
-
-function drawPlayer() {
-  ctx.fillStyle = player.color
-  ctx.fillRect(player.x - cameraX, player.y, player.width, player.height)
-}
-
-function updatePlayer() {
-  // horizontal movement
-  if (keys['ArrowRight'] || keys['KeyD']) {
-    player.dx = player.speed
-  } else if (keys['ArrowLeft'] || keys['KeyA']) {
-    player.dx = -player.speed
-  } else {
-    player.dx = 0
-  }
-
-  player.x += player.dx
-
-  player.dy += gravity
-  player.y += player.dy
-
-  player.onGround = false
-  for (let p of platforms) {
-    if (
-      player.x + player.width > p.x &&
-      player.x < p.x + p.width &&
-      player.y + player.height >= p.y &&
-      player.y + player.height <= p.y + p.height + Math.abs(player.dy)
-    ) {
-      player.y = p.y - player.height
-      player.dy = 0
-      player.onGround = true
-    }
-  }
-  if (!player.onGround && player.y + player.height > groundHeight) {
-    player.y = groundHeight - player.height
-    player.dy = 0
-    player.onGround = true
-  }
-  // prevent falling off left side
-  if (player.x < 0) player.x = 0
-}
-
-function updateCamera() {
-  cameraX = player.x - canvas.width / 4
-  if (cameraX < 0) cameraX = 0
-}
-
-function draw() {
-  const biome = getCurrentBiome()
-  ctx.fillStyle = biome.bg
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  drawPlatforms()
-  drawPlayer()
-}
-
-function jump() {
-  if (player.onGround) {
-    player.dy = jumpPower
-    player.onGround = false
-  }
-}
-
-document.addEventListener('keydown', (e) => {
-  if (!gameStarted) return
-  keys[e.code] = true
-  if (e.code === 'Space' || e.code === 'ArrowUp') jump()
-})
-
-document.addEventListener('keyup', (e) => {
-  keys[e.code] = false
-})
-
-document.getElementById('startBtn').addEventListener('click', () => {
-  if (!gameStarted) {
-    gameStarted = true
-    document.getElementById('menu').style.display = 'none'
-    player.x = 100
-    player.y = groundHeight - player.height
-    player.dy = 0
-    player.dx = 0
-    createPlatforms()
-    weatherParticles.length = 0
-    requestAnimationFrame(update)
-  }
-})
-
-function update() {
-  if (!gameStarted) return
-  updatePlayer()
-  updateCamera()
-  updateFade()
-  updateWeather()
-  draw()
-  drawWeather()
-  drawFadeOverlay()
-  requestAnimationFrame(update)
-}
+resetGame();
+gameLoop();
