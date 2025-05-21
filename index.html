@@ -1,33 +1,35 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Biomová skákací hra</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skákací Hra</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="mainMenu" class="menu">
-    <h1>Biomová skákací hra</h1>
-    <label for="colorSelect">Vyber barvu kostky:</label>
-    <select id="colorSelect">
-      <option value="red">Červená</option>
-      <option value="blue">Modrá</option>
-      <option value="green">Zelená</option>
-      <option value="gold">Zlatá (odemčeno při skóre 100)</option>
-    </select>
-    <button id="startBtn">Start</button>
-    <h2>Leaderboard</h2>
-    <ol id="leaderboardList"></ol>
-  </div>
 
-  <div id="deathScreen" class="menu" style="display:none; flex-direction: column;">
-    <h1>Prohrál jsi!</h1>
-    <button id="restartBtn">Restartovat</button>
-  </div>
+<div id="mainMenu" class="menu">
+  <h1>Skákací Hra</h1>
+  <label for="colorSelect">Barva kostky:</label>
+  <select id="colorSelect">
+    <option value="red">Červená</option>
+    <option value="green">Zelená</option>
+    <option value="blue">Modrá</option>
+    <option value="gold">Zlatá (odemkne se při skóre 100)</option>
+  </select>
+  <button id="startBtn">Start</button>
+  <h2>Leaderboard</h2>
+  <ul id="leaderboardList"></ul>
+</div>
 
-  <canvas id="gameCanvas"></canvas>
+<div id="deathScreen" class="menu" style="display:none;">
+  <h1>Game Over</h1>
+  <p id="finalScore"></p>
+  <button id="restartBtn">Restart</button>
+</div>
 
-  <script src="game.js"></script>
+<canvas id="gameCanvas"></canvas>
+
+<script src="game.js"></script>
 </body>
 </html>
