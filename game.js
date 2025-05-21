@@ -155,18 +155,6 @@ function resetGame() {
 
 document.getElementById('restartBtn').addEventListener('click', resetGame);
 
-function startGame() {
-  resetGame();
-  hideMainMenu();
-  gameRunning = true;
-  update();
-}
-
-document.getElementById('startBtn').addEventListener('click', () => {
-  startGame();
-});
-
-
 function applyFriction() {
   if (getCurrentBiome().groundType === 'ice') {
     player.dx *= 0.98;
