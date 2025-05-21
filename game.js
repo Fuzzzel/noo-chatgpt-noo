@@ -1,4 +1,3 @@
-
 const canvas = document.getElementById('gameCanvas')
 const ctx = canvas.getContext('2d')
 
@@ -55,10 +54,8 @@ let player = {
   width: 50,
   height: 50,
   dy: 0,
-  dx: 0,
   onGround: false,
-  color: 'gold',
-  speed: 5
+  color: 'gold'
 }
 
 const gravity = 0.7
@@ -69,8 +66,6 @@ let fading = false
 let fadeFromBiome, fadeToBiome
 
 const weatherParticles = []
-
-let keys = {}
 
 function lerpColor(a, b, t) {
   a = a.replace('#', '')
@@ -266,6 +261,7 @@ function drawPlatforms() {
     ctx.fillStyle = p.biome.platformColor
     ctx.fillRect(p.x - cameraX, p.y, p.width, p.height)
   }
+  // podlaha podle biomu
   ctx.fillStyle = biome.groundColor
   ctx.fillRect(0, groundHeight, canvas.width, canvas.height - groundHeight)
 }
@@ -276,17 +272,6 @@ function drawPlayer() {
 }
 
 function updatePlayer() {
-  // horizontal movement
-  if (keys['ArrowRight'] || keys['KeyD']) {
-    player.dx = player.speed
-  } else if (keys['ArrowLeft'] || keys['KeyA']) {
-    player.dx = -player.speed
-  } else {
-    player.dx = 0
-  }
-
-  player.x += player.dx
-
   player.dy += gravity
   player.y += player.dy
 
@@ -308,8 +293,6 @@ function updatePlayer() {
     player.dy = 0
     player.onGround = true
   }
-  // prevent falling off left side
-  if (player.x < 0) player.x = 0
 }
 
 function updateCamera() {
@@ -335,22 +318,15 @@ function jump() {
 
 document.addEventListener('keydown', (e) => {
   if (!gameStarted) return
-  keys[e.code] = true
   if (e.code === 'Space' || e.code === 'ArrowUp') jump()
-})
-
-document.addEventListener('keyup', (e) => {
-  keys[e.code] = false
 })
 
 document.getElementById('startBtn').addEventListener('click', () => {
   if (!gameStarted) {
     gameStarted = true
-    document.getElementById('menu').style.display = 'none'
     player.x = 100
     player.y = groundHeight - player.height
     player.dy = 0
-    player.dx = 0
     createPlatforms()
     weatherParticles.length = 0
     requestAnimationFrame(update)
