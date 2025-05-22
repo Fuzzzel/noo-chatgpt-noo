@@ -52,16 +52,3 @@ html, body {
 .menu button:hover, .menu select:hover {
   background-color: #555;
 }
-
-#leaderboardList {
-  list-style: none;
-  padding-left: 0;
-  max-height: 150px;
-  overflow-y: auto;
-  text-align: left;
-}
-
-#leaderboardList li {
-  padding: 5px 0;
-  border-bottom: 1px solid #444;
-}
