@@ -518,7 +518,7 @@ function createPlatforms() {
     biome: biomes[0]
   })
 
-  for (let i = 1; i < 100; i++) {
+  for (let i = 1; i < 1500; i++) {
     let biomeIndex = Math.floor(lastX / biomeDistance) % biomes.length
     let biome = biomes[biomeIndex]
 
